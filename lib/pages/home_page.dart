@@ -992,17 +992,16 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   // --- Widgets de Construção das Listas (Tarefas, Notas) ---
   
-  // ***** CORREÇÃO DO BUG 1 (LISTA NÃO ATUALIZA) *****
+  // ***** CORREÇÃO DEFINITIVA DO BUG DE ATUALIZAÇÃO *****
   Widget _buildTaskList(BuildContext context, bool showCompleted, String searchTerm) {
-    // 1. Escuta a caixa
-    // ***** CORREÇÃO: MUDANÇA PARA useValueListenable *****
-    final box = useValueListenable(tasksBox.listenable());
-
-    // 2. Cria um Future "memoizado".
-    final listFuture = useMemoized(() {
-      // 3. O Future() garante que este código pesado rode *após* o frame
-      return Future(() {
-        // Acessa o valor atual da caixa (que já é o 'box')
+    // 1. Substitui todos os hooks por ValueListenableBuilder
+    return ValueListenableBuilder(
+      valueListenable: tasksBox.listenable(),
+      builder: (context, Box<Task> box, _) {
+        
+        // 2. A lógica de filtragem e ordenação agora roda
+        //    DENTRO do builder. Isso garante que ela RODE
+        //    toda vez que a caixa (box) for alterada.
         final keys = box.keys.where((key) {
           final task = box.get(key); 
           if (task == null) return false;
@@ -1013,7 +1012,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           return task.isCompleted == showCompleted && matchesSearch;
         }).toList();
 
-        // 4. A ordenação também acontece aqui
         keys.sort((a, b) {
           final taskA = box.get(a);
           final taskB = box.get(b);
@@ -1026,83 +1024,60 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             return taskB.createdAt.compareTo(taskA.createdAt);
           }
         });
-        return keys;
-      });
-    // 5. A dependência agora é o *próprio box* + filtros
-    // ***** CORREÇÃO: A dependência correta é box.length *****
-    }, [box.length, showCompleted, searchTerm]); 
 
-    // 6. useFuture escuta o Future
-    // ***** CORREÇÃO: initialData: null para mostrar o loading *****
-    final snapshot = useFuture(listFuture, initialData: null);
+        // 3. O resto da lógica (lista vazia, etc.) permanece
+        if (keys.isEmpty) {
+          return Center(
+              child: Padding(
+            padding: const EdgeInsets.all(32.0),
+            child: Text(
+              showCompleted
+                  ? (searchTerm.isEmpty
+                      ? 'No completed tasks yet.'
+                      : 'No completed tasks found.')
+                  : (searchTerm.isEmpty
+                      ? 'No pending tasks. Add one!'
+                      : 'No pending tasks found.'),
+              style: const TextStyle(color: kTextSecondary, fontSize: 16),
+              textAlign: TextAlign.center,
+            ),
+          ));
+        }
 
-    // 7. Mostra um loading enquanto o Future (filtragem/ordenação) está rodando
-    // ***** CORREÇÃO: Lógica de loading mais robusta *****
-    if (snapshot.connectionState == ConnectionState.waiting || !snapshot.hasData) {
-      return const Center(child: CircularProgressIndicator());
-    }
+        // 4. Retorna o ListView
+        return ListView.builder(
+          padding:
+              const EdgeInsets.only(bottom: 80, left: 8, right: 8, top: 8),
+          itemCount: keys.length, 
+          itemBuilder: (context, index) {
+            final taskKey = keys[index];
+            final task = tasksBox.get(taskKey); 
 
-    // 8. Mostra um erro se algo der errado
-    if (snapshot.hasError) {
-      return Center(child: Text("Error loading tasks: ${snapshot.error}"));
-    }
-    
-    final taskKeys = snapshot.data as List<dynamic>;
+            if (task == null) return const SizedBox.shrink();
 
-    // 9. Se não tiver dados (ou a lista estiver vazia)
-    if (taskKeys.isEmpty) {
-      return Center(
-          child: Padding(
-        padding: const EdgeInsets.all(32.0),
-        child: Text(
-          showCompleted
-              ? (searchTerm.isEmpty
-                  ? 'No completed tasks yet.'
-                  : 'No completed tasks found.')
-              // ***** CORREÇÃO: Lógica de texto da barra de pesquisa *****
-              : (searchTerm.isEmpty
-                  ? 'No pending tasks. Add one!'
-                  // CORREÇÃO: Usa o searchTerm correto
-                  : 'No pending tasks found.'),
-          style: const TextStyle(color: kTextSecondary, fontSize: 16),
-          textAlign: TextAlign.center,
-        ),
-      ));
-    }
-
-    // 10. Finalmente, temos os dados!
-    return ListView.builder(
-      padding:
-          const EdgeInsets.only(bottom: 80, left: 8, right: 8, top: 8),
-      itemCount: taskKeys.length, // Usa a lista do snapshot
-      itemBuilder: (context, index) {
-        final taskKey = taskKeys[index];
-        final task = tasksBox.get(taskKey); // Lê da caixa original
-
-        if (task == null) return const SizedBox.shrink();
-
-        return TaskListItem(
-          task: task,
-          onToggleComplete: DataService.toggleTaskCompletion,
-          onToggleSubtask: DataService.toggleSubtaskCompletion,
-          onEdit: (Task taskToEdit) => _showTaskDialog(task: taskToEdit),
-          onConfirmDelete: _confirmDismiss,
-          onDelete: DataService.deleteTask,
+            return TaskListItem(
+              task: task,
+              onToggleComplete: DataService.toggleTaskCompletion,
+              onToggleSubtask: DataService.toggleSubtaskCompletion,
+              onEdit: (Task taskToEdit) => _showTaskDialog(task: taskToEdit),
+              onConfirmDelete: _confirmDismiss,
+              onDelete: DataService.deleteTask,
+            );
+          },
         );
       },
     );
   }
 
   Widget _buildNotesList(BuildContext context, bool showArchived, String searchTerm) {
-    // ***** CORREÇÃO DO BUG 1 e 3 (LISTA NÃO ATUALIZA / CRASH DA NOTA) *****
-    // 1. Escuta a caixa
-    // ***** CORREÇÃO: MUDANÇA PARA useValueListenable *****
-    final box = useValueListenable(notesBox.listenable());
-
-    // 2. Cria o Future "memoizado"
-    final listFuture = useMemoized(() {
-      // 3. Roda a lógica de forma assíncrona
-      return Future(() {
+    // ***** CORREÇÃO DEFINITIVA DO BUG DE ATUALIZAÇÃO *****
+    // 1. Substitui todos os hooks por ValueListenableBuilder
+    return ValueListenableBuilder(
+      valueListenable: notesBox.listenable(),
+      builder: (context, Box<Note> box, _) {
+        
+        // 2. A lógica de filtragem e ordenação agora roda
+        //    DENTRO do builder.
         final keys = box.keys.where((key) {
           final note = box.get(key);
           if (note == null) return false;
@@ -1113,7 +1088,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           return note.isArchived == showArchived && matchesSearch;
         }).toList();
 
-        // 4. Ordena
         keys.sort((a, b) {
           final noteA = box.get(a);
           final noteB = box.get(b);
@@ -1126,126 +1100,107 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             return noteB.createdAt.compareTo(noteA.createdAt);
           }
         });
-        return keys;
-      });
-    // 5. A dependência agora é o *próprio box* + filtros
-    // ***** CORREÇÃO: A dependência correta é box.length *****
-    }, [box.length, showArchived, searchTerm]); 
 
-    // 6. Escuta o Future
-    // ***** CORREÇÃO: initialData: null para mostrar o loading *****
-    final snapshot = useFuture(listFuture, initialData: null);
-
-    // 7. Mostra o loading
-    // ***** CORREÇÃO: Lógica de loading mais robusta *****
-    if (snapshot.connectionState == ConnectionState.waiting || !snapshot.hasData) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    // 8. Mostra o erro
-    if (snapshot.hasError) {
-      return Center(child: Text("Error loading notes: ${snapshot.error}"));
-    }
-    
-    final noteKeys = snapshot.data as List<dynamic>;
-
-    // 9. Lista vazia
-    if (noteKeys.isEmpty) {
-      return Center(
-          child: Padding(
-        padding: const EdgeInsets.all(32.0),
-        child: Text(
-          showArchived
-              ? (searchTerm.isEmpty
-                  ? 'No archived notes.'
-                  : 'No archived notes found.')
-              : (searchTerm.isEmpty
-                  ? 'No notes yet. Add one!'
-                  : 'No notes found.'),
-          style: const TextStyle(color: kTextSecondary, fontSize: 16),
-          textAlign: TextAlign.center,
-        ),
-      ));
-    }
-    
-    // 10. Temos dados!
-    return ListView.separated(
-      padding: const EdgeInsets.only(bottom: 80, left: 8, right: 8, top: 8),
-      itemCount: noteKeys.length, // Usa a lista do snapshot
-      separatorBuilder: (context, index) => Divider(
-          height: 1,
-          thickness: 0.3,
-          color: kTextSecondary.withAlpha((0.2 * 255).round())),
-      itemBuilder: (context, index) {
-        final noteKey = noteKeys[index];
-        final note = notesBox.get(noteKey); // Lê da caixa original
-
-        if (note == null) return const SizedBox.shrink(); 
+        // 3. O resto da lógica (lista vazia, etc.) permanece
+        if (keys.isEmpty) {
+          return Center(
+              child: Padding(
+            padding: const EdgeInsets.all(32.0),
+            child: Text(
+              showArchived
+                  ? (searchTerm.isEmpty
+                      ? 'No archived notes.'
+                      : 'No archived notes found.')
+                  : (searchTerm.isEmpty
+                      ? 'No notes yet. Add one!'
+                      : 'No notes found.'),
+              style: const TextStyle(color: kTextSecondary, fontSize: 16),
+              textAlign: TextAlign.center,
+            ),
+          ));
+        }
         
-        return ListTile(
-          contentPadding: const EdgeInsets.only(left: 4.0, right: 0),
-          leading: IconButton(
-            icon: Icon(
-              note.isArchived
-                  ? Icons.unarchive_outlined
-                  : Icons.archive_outlined,
-              color: note.isArchived ? kTextSecondary : kYellowColor,
-              size: 22,
-            ),
-            padding: const EdgeInsets.all(12),
-            constraints: const BoxConstraints(),
-            onPressed: () => DataService.toggleNoteArchived(note),
-            tooltip: note.isArchived ? 'Unarchive Note' : 'Archive Note',
-          ),
-          title: Text(
-            note.text,
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 14,
-              color: note.isArchived
-                  ? kTextSecondary
-                  : kTextPrimary.withAlpha((0.85 * 255).round()),
-              decoration:
-                  note.isArchived ? TextDecoration.lineThrough : null,
-              decorationColor: kTextSecondary,
-            ),
-          ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.edit_outlined,
-                    color: kTextSecondary, size: 20),
-                padding: const EdgeInsets.all(8),
+        // 4. Retorna o ListView
+        return ListView.separated(
+          padding: const EdgeInsets.only(bottom: 80, left: 8, right: 8, top: 8),
+          itemCount: keys.length, 
+          separatorBuilder: (context, index) => Divider(
+              height: 1,
+              thickness: 0.3,
+              color: kTextSecondary.withAlpha((0.2 * 255).round())),
+          itemBuilder: (context, index) {
+            final noteKey = keys[index];
+            final note = notesBox.get(noteKey); 
+
+            if (note == null) return const SizedBox.shrink(); 
+            
+            return ListTile(
+              contentPadding: const EdgeInsets.only(left: 4.0, right: 0),
+              leading: IconButton(
+                icon: Icon(
+                  note.isArchived
+                      ? Icons.unarchive_outlined
+                      : Icons.archive_outlined,
+                  color: note.isArchived ? kTextSecondary : kYellowColor,
+                  size: 22,
+                ),
+                padding: const EdgeInsets.all(12),
                 constraints: const BoxConstraints(),
-                onPressed: () => _showNoteDialog(note: note),
-                tooltip: 'Edit Note',
+                onPressed: () => DataService.toggleNoteArchived(note),
+                tooltip: note.isArchived ? 'Unarchive Note' : 'Archive Note',
               ),
-              IconButton(
-                icon: const Icon(Icons.delete_outline,
-                    color: kRedColor, size: 20),
-                padding: const EdgeInsets.only(
-                    left: 0, right: 8, top: 8, bottom: 8),
-                constraints: const BoxConstraints(),
-                tooltip: 'Delete Task',
-                onPressed: () async {
-                  final confirm = await _confirmDismiss(
-                      note.text.length > 30
-                          ? '${note.text.substring(0, 30)}...'
-                          : note.text);
-                  if (confirm) {
-                    DataService.deleteNote(note);
-                  }
-                },
+              title: Text(
+                note.text,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: note.isArchived
+                      ? kTextSecondary
+                      : kTextPrimary.withAlpha((0.85 * 255).round()),
+                  decoration:
+                      note.isArchived ? TextDecoration.lineThrough : null,
+                  decorationColor: kTextSecondary,
+                ),
               ),
-            ],
-          ),
-          onTap: () => _showNoteDialog(note: note),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.edit_outlined,
+                        color: kTextSecondary, size: 20),
+                    padding: const EdgeInsets.all(8),
+                    constraints: const BoxConstraints(),
+                    onPressed: () => _showNoteDialog(note: note),
+                    tooltip: 'Edit Note',
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline,
+                        color: kRedColor, size: 20),
+                    padding: const EdgeInsets.only(
+                        left: 0, right: 8, top: 8, bottom: 8),
+                    constraints: const BoxConstraints(),
+                    tooltip: 'Delete Task',
+                    onPressed: () async {
+                      final confirm = await _confirmDismiss(
+                          note.text.length > 30
+                              ? '${note.text.substring(0, 30)}...'
+                              : note.text);
+                      if (confirm) {
+                        DataService.deleteNote(note);
+                      }
+                    },
+                  ),
+                ],
+              ),
+              onTap: () => _showNoteDialog(note: note),
+            );
+          },
         );
       },
     );
   }
+
 
   Widget _buildProfileTab() {
     // ... (Este widget permanece o mesmo) ...
@@ -1747,11 +1702,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                         children: [
                           // A barra de pesquisa foi removida daqui
                           Expanded(
-                            child: HookBuilder(builder: (context) {
-                              // Passa um searchTerm vazio
-                              return _buildTaskList(
-                                  context, false, ""); 
-                            }),
+                            // ***** CORREÇÃO: Removido o HookBuilder *****
+                            child: _buildTaskList(
+                                  context, false, ""), 
                           ),
                         ],
                       ),
@@ -1761,10 +1714,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                            _buildSearchField(
                               _searchNotesController, 'Search in notes...'),
                           Expanded(
-                            child: HookBuilder(builder: (context) {
-                              return _buildNotesList(
-                                  context, false, _notesSearchTerm);
-                            }),
+                            // ***** CORREÇÃO: Removido o HookBuilder *****
+                            child: _buildNotesList(
+                                  context, false, _notesSearchTerm),
                           ),
                         ],
                       ),
