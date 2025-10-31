@@ -1,56 +1,41 @@
-name: LIT
-description: "Live. Improved. Together. Ultra productive task manager superapp."
+name: lit
+description: "LIT - Life. Improved. Together."
 
-publish_to: 'none' # Remove this line if you decide to publish
+publish_to: 'none'
 
-version: 0.1.2+4
+# A versão é 0.4.3+1
+# Aumentei o +1 (build number) para garantir que o Android/iOS entendam como uma atualização
+version: 0.3.5+6
 
 environment:
-  sdk: '>=3.3.0' # Atualizado para a versão mais recente do Dart
+  sdk: '>=3.3.0 <4.0.0' # Use a versão do seu SDK
 
 dependencies:
   flutter:
     sdk: flutter
-
-  # --- Nossas Dependências Essenciais ---
-
-  # O Hive é o nosso banco de dados local. É super rápido e leve.
+  
+  # --- Pacotes do Projeto ---
   hive: ^2.2.3
   hive_flutter: ^1.1.0
-  build_runner: ^2.4.11 # Use a versão mais recente que encontrar ou esta
-  hive_generator: ^2.0.1  # Necessário para gerar código do Hive
-  shared_preferences: ^2.2.3
-
-  # Precisamos disso para encontrar o local correto no celular para salvar o banco.
   path_provider: ^2.1.3
-
-  # Para criar IDs únicos para cada tarefa, facilitando a migração.
   uuid: ^4.4.0
-
-  # Para ícones bonitos
-  cupertino_icons: ^1.0.6
   flutter_hooks: ^0.20.5
+  shared_preferences: ^2.2.3
+  flutter_speed_dial: ^7.0.0
+  image_picker: ^1.0.7  
+  cupertino_icons: ^1.0.6
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-
-  flutter_lints: ^6.0.0 # Sua versão mais recente
-
-  # --- PACOTE DO ÍCONE (NOVO!) ---
-  # Este pacote vai gerar todos os ícones para nós automaticamente.
-  flutter_launcher_icons: ^0.13.1
-  
+  flutter_lints: ^3.0.0 # Versão atualizada
+  build_runner: ^2.4.11
+  hive_generator: ^2.0.1
 
 flutter:
   uses-material-design: true
 
-# --- CONFIGURAÇÃO DO ÍCONE (NOVO!) ---
-# O Flutter vai ler isso para criar os ícones.
-flutter_launcher_icons:
-  android: true
-  ios: true
-  image_path: "assets/icon/icon.png" # Caminho para o seu PNG principal
-  adaptive_icon_background: "#00000000" # FUNDO TRANSPARENTE (como pedido)
-  adaptive_icon_foreground: "assets/icon/icon_foreground.png" # Seu PNG sem fundo
+  # --- ADIÇÃO DA PASTA DE ASSETS ---
+  assets:
+    - assets/images/ # Informa ao Flutter para incluir tudo dentro desta pasta
 

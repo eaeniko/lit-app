@@ -1,6 +1,6 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-part of 'main.dart';
+part of 'models.dart';
 
 // **************************************************************************
 // TypeAdapterGenerator
@@ -100,6 +100,49 @@ class NoteAdapter extends TypeAdapter<Note> {
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is NoteAdapter &&
+          runtimeType == other.runtimeType &&
+          typeId == other.typeId;
+}
+
+class UserProfileAdapter extends TypeAdapter<UserProfile> {
+  @override
+  final int typeId = 2;
+
+  @override
+  UserProfile read(BinaryReader reader) {
+    final numOfFields = reader.readByte();
+    final fields = <int, dynamic>{
+      for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
+    };
+    return UserProfile(
+      totalXP: fields[0] as double,
+      level: fields[1] as int,
+      playerName: fields[2] as String,
+      avatarImagePath: fields[3] as String?,
+    );
+  }
+
+  @override
+  void write(BinaryWriter writer, UserProfile obj) {
+    writer
+      ..writeByte(4)
+      ..writeByte(0)
+      ..write(obj.totalXP)
+      ..writeByte(1)
+      ..write(obj.level)
+      ..writeByte(2)
+      ..write(obj.playerName)
+      ..writeByte(3)
+      ..write(obj.avatarImagePath);
+  }
+
+  @override
+  int get hashCode => typeId.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is UserProfileAdapter &&
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }

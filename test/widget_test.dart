@@ -8,11 +8,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:mylitapp/main.dart';
+// CORREÇÃO: O nome do seu pacote é 'lit', não 'mylitapp'
+import 'package:lit/main.dart'; 
 
 void main() {
   testWidgets('Counter increments smoke test', (WidgetTester tester) async {
     // Build our app and trigger a frame.
+    // O 'MyApp' agora é encontrado porque o import está correto
     await tester.pumpWidget(const MyApp());
 
     // Verify that our counter starts at 0.
@@ -28,3 +30,16 @@ void main() {
     expect(find.text('1'), findsOneWidget);
   });
 }
+// ```
+
+// ---
+
+// ### 3. Próximos Passos (Para Fazer Funcionar)
+
+// Depois de salvar esses dois arquivos (`lib/main.dart` e `test/widget_test.dart`):
+
+// 1.  **Garanta as Dependências:** Abra o terminal e rode `flutter pub get` (para garantir que `flutter_speed_dial` e `flutter_hooks` estão 100% instalados).
+// 2.  **Rode o Build Runner (MUITO IMPORTANTE):** Este é o passo que corrige o erro `UserProfileAdapter isn't defined` e `main.g.dart`.
+//     ```bash
+//     dart run build_runner build --delete-conflicting-outputs
+    
