@@ -9,11 +9,6 @@ const String notesBoxName = 'notes_v4';
 const String profileBoxName = 'user_profile_v4';
 const String profileKey = 'main_profile_v4';
 
-// --- Constantes de XP ---
-const double xpPerTask = 0.5;
-const double xpPerSubtask = 0.1;
-const double xpPerNote = 0.05;
-
 // --- Modelo Task ---
 @HiveType(typeId: 0)
 class Task extends HiveObject {
@@ -49,6 +44,7 @@ class Task extends HiveObject {
     }
   }
 
+  // GETTER LENTO: Decodifica o JSON toda vez.
   List<String> get subtasks {
     if (subtasksJson == null || subtasksJson!.isEmpty) return [];
     try {
@@ -58,6 +54,7 @@ class Task extends HiveObject {
     }
   }
 
+  // GETTER LENTO: Decodifica DOIS JSONs toda vez.
   List<bool> get subtaskCompletion {
     if (subtaskCompletionJson == null || subtaskCompletionJson!.isEmpty) {
       return [];
@@ -65,7 +62,7 @@ class Task extends HiveObject {
     try {
       final decoded = jsonDecode(subtaskCompletionJson!);
       final completionList = List<bool>.from(decoded);
-      final taskCount = subtasks.length;
+      final taskCount = subtasks.length; // <-- Chama o getter 'subtasks' (lento)
       if (completionList.length < taskCount) {
         completionList
             .addAll(List.filled(taskCount - completionList.length, false));
@@ -74,12 +71,21 @@ class Task extends HiveObject {
       }
       return completionList;
     } catch (e) {
-      final taskCount = subtasks.length;
+      final taskCount = subtasks.length; // <-- Chama o getter 'subtasks' (lento)
       return taskCount >= 0 ? List.filled(taskCount, false) : [];
     }
   }
 
+  // GETTER LENTO: Usa o getter 'subtasks'.
   bool get hasSubtasks => subtasks.isNotEmpty;
+
+  // AJUSTE: GETTER RÁPIDO: Apenas verifica o texto JSON, sem decodificar.
+  bool get hasSubtasksFast {
+    if (subtasksJson == null || subtasksJson!.isEmpty) return false;
+    // Verifica se o JSON é apenas um array vazio '[]'
+    if (subtasksJson == '[]') return false;
+    return true; // Se não for nulo, vazio ou '[]', tem subtarefas.
+  }
 }
 
 // --- Modelo Note ---
@@ -112,7 +118,6 @@ class UserProfile extends HiveObject {
   int level;
   @HiveField(2)
   String playerName;
-  // AJUSTE: Novo campo para salvar o caminho da imagem do avatar
   @HiveField(3)
   String? avatarImagePath;
 
@@ -120,7 +125,6 @@ class UserProfile extends HiveObject {
     this.totalXP = 0.0,
     this.level = 1,
     this.playerName = "Player",
-    this.avatarImagePath, // AJUSTE: Adicionado ao construtor
+    this.avatarImagePath,
   });
 }
-

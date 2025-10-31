@@ -137,13 +137,13 @@ class MyApp extends StatelessWidget {
         ),
 
         checkboxTheme: CheckboxThemeData(
-          fillColor: MaterialStateProperty.resolveWith((states) {
-            if (states.contains(MaterialState.selected)) {
+          fillColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.selected)) {
               return kAccentColor.withAlpha((0.9 * 255).round());
             }
             return kCardColor.withAlpha((0.5 * 255).round());
           }),
-          checkColor: MaterialStateProperty.all(kTextPrimary),
+          checkColor: WidgetStateProperty.all(kTextPrimary),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
           side: BorderSide(color: kTextPrimary.withAlpha(50), width: 1),
         ),

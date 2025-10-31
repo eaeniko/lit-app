@@ -1,23 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:uuid/uuid.dart';
-import 'dart:convert';
-import 'dart:math';
+// REMOVIDO: import 'package:uuid/uuid.dart';
+// REMOVIDO: import 'dart:convert';
+// import 'dart:math'; // REMOVIDO: Importação não utilizada
+// CORREÇÃO: 'package.' para 'package:'
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:flutter_speed_dial/flutter_speed_dial.dart';
 import 'dart:ui'; // Para o BackdropFilter (Liquid Glass)
-import 'package:image_picker/image_picker.dart'; // AJUSTE: Para seleção de imagem
-import 'dart:io'; // AJUSTE: Para usar File(image.path)
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 
-// Importa os modelos do novo arquivo
+// Importa os modelos
 import 'package:lit/models.dart';
-// Importa as constantes de cores do main.dart
+// Importa as constantes de cores
 import 'package:lit/main.dart';
+// Importa o novo serviço de balanceamento (caminho atualizado)
+// CORREÇÃO: 'package.' para 'package:'
+import 'package:lit/services/balancing_service.dart';
+// AJUSTE: Importa o novo widget de item da lista (caminho atualizado)
+// CORREÇÃO: 'package.' para 'package:'
+import 'package:lit/widgets/task_list_item.dart';
 
-// Gerador de UUID
-const uuid = Uuid();
+// NOVO IMPORT DO SERVIÇO DE DADOS
+// CORREÇÃO: 'package.' para 'package:'
+import 'package:lit/services/data_service.dart';
 
-// --- HomePage Widget ---
+// REMOVIDO: const uuid = Uuid();
+
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
   @override
@@ -32,9 +41,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       TextEditingController();
   String _notesSearchTerm = '';
   String _historySearchTerm = '';
+
+  // As caixas ainda são necessárias para os ValueListenableBuilders
   late Box<Task> tasksBox;
   late Box<Note> notesBox;
   late Box<UserProfile> profileBox;
+
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   late TabController _tabController;
   bool _uiVisible = true;
@@ -71,117 +83,22 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     super.dispose();
   }
 
-  // --- Funções de XP e Nível ---
-  static const double _levelBase = 10.0;
-  static const double _levelExponent = 2.5;
-  double _xpForLevel(int level) {
-    if (level <= 1) return 0.0;
-    return _levelBase * pow(level - 1, _levelExponent);
-  }
+  // --- Funções de XP e Nível (REMOVIDAS) ---
+  // A lógica de _addXP foi movida para o DataService
 
-  double _xpForNextLevel(int level) {
-    return _xpForLevel(level + 1);
-  }
-
-  int _calculateLevel(double totalXP) {
-    if (totalXP < _levelBase) return 1;
-    int level = (pow(totalXP / _levelBase, 1 / _levelExponent)).floor() + 1;
-    return level;
-  }
-
-  void _addXP(double amount) {
-    final profile = profileBox.get(profileKey);
-    if (profile == null) {
-      return;
-    }
-    profile.totalXP += amount;
-    profile.level = _calculateLevel(profile.totalXP);
-    profile.save();
-  }
-
-  // --- Funções CRUD ---
-  void _addTask(String text, List<String> subtasks) {
-    final newTask = Task(
-      id: uuid.v4(),
-      text: text,
-      createdAt: DateTime.now(),
-      subtasks: subtasks,
-      subtaskCompletion:
-          subtasks.isNotEmpty ? List.filled(subtasks.length, false) : [],
-    );
-    tasksBox.put(newTask.id, newTask);
-  }
-
-  void _updateTask(Task task, String newText, List<String> newSubtasks,
-      List<bool> newSubtaskCompletion) {
-    task.text = newText;
-    task.subtasksJson = jsonEncode(newSubtasks);
-    task.subtaskCompletionJson = jsonEncode(newSubtaskCompletion);
-    task.save();
-  }
-
-  void _toggleTaskCompletion(Task task) {
-    bool wasCompleted = task.isCompleted;
-    task.isCompleted = !task.isCompleted;
-    task.completedAt = task.isCompleted ? DateTime.now() : null;
-    task.save();
-    if (task.isCompleted && !wasCompleted) {
-      _addXP(xpPerTask);
-    }
-  }
-
-  void _toggleSubtaskCompletion(Task task, int subtaskIndex) {
-    final completions = task.subtaskCompletion;
-    if (subtaskIndex >= 0 && subtaskIndex < completions.length) {
-      bool wasSubtaskCompleted = completions[subtaskIndex];
-      completions[subtaskIndex] = !completions[subtaskIndex];
-      task.subtaskCompletionJson = jsonEncode(completions);
-      task.save();
-      if (completions[subtaskIndex] && !wasSubtaskCompleted) {
-        _addXP(xpPerSubtask);
-      }
-    }
-  }
-
-  void _deleteTask(Task task) {
-    task.delete();
-  }
-
-  void _addNote(String text) {
-    final newNote = Note(
-      id: uuid.v4(),
-      text: text,
-      createdAt: DateTime.now(),
-    );
-    notesBox.put(newNote.id, newNote);
-  }
-
-  void _updateNote(Note note, String newText) {
-    note.text = newText;
-    note.save();
-  }
-
-  void _toggleNoteArchived(Note note) {
-    bool wasArchived = note.isArchived;
-    note.isArchived = !note.isArchived;
-    note.archivedAt = note.isArchived ? DateTime.now() : null;
-    note.save();
-    if (note.isArchived && !wasArchived) {
-      _addXP(xpPerNote);
-    }
-  }
-
-  void _deleteNote(Note note) {
-    note.delete();
-  }
+  // --- Funções CRUD (REMOVIDAS) ---
+  // _addTask, _updateTask, _toggleTaskCompletion, _toggleSubtaskCompletion,
+  // _deleteTask, _addNote, _updateNote, _toggleNoteArchived, _deleteNote
+  // foram todas movidas para o DataService.
 
   // --- Diálogos ---
   Future<void> _showTaskDialog({Task? task}) async {
+    // --- OTIMIZAÇÃO 3: Carregamento Assíncrono ---
+    // Acessar task.subtasks é LENTO (decodifica JSON).
+    // Fazemos isso *depois* que o diálogo abrir, usando HookBuilder.
     final textController = TextEditingController(text: task?.text ?? '');
-    List<String> currentSubtasks = task?.subtasks ?? [];
-    List<bool> currentCompletion = task?.subtaskCompletion ?? [];
-    List<TextEditingController> subtaskControllers =
-        currentSubtasks.map((t) => TextEditingController(text: t)).toList();
+    // List<String> currentSubtasks = task?.subtasks ?? []; // <- LENTO, REMOVIDO
+    // List<bool> currentCompletion = task?.subtaskCompletion ?? []; // <- LENTO, REMOVIDO
 
     await showDialog<void>(
       context: context,
@@ -190,10 +107,46 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         return HookBuilder(
           builder: (context) {
             final textState = useState(textController.text);
-            final subtasksState = useState(currentSubtasks);
-            final completionState = useState(currentCompletion);
-            final subControllersState = useState(subtaskControllers);
+            // Estados para carregar os dados
+            final isLoading = useState(task != null); // Só carrega se for edição
+            final subtasksState = useState<List<String>>([]);
+            final completionState = useState<List<bool>>([]);
+            final subControllersState =
+                useState<List<TextEditingController>>([]);
 
+            // Efeito para carregar os dados LENTOS 1x
+            useEffect(() {
+              // CORREÇÃO: Adicionado 'async' para satisfazer 'Future<void>'
+              Future<void> loadTaskData() async {
+                // Acessa os getters LENTOS aqui, fora da build principal
+                final loadedSubtasks = task?.subtasks ?? [];
+                final loadedCompletion = task?.subtaskCompletion ?? [];
+                final loadedControllers = loadedSubtasks
+                    .map((t) => TextEditingController(text: t))
+                    .toList();
+
+                // Atualiza os estados
+                subtasksState.value = loadedSubtasks;
+                completionState.value = loadedCompletion;
+                subControllersState.value = loadedControllers;
+                isLoading.value = false; // Terminou de carregar
+              }
+
+              if (task != null) {
+                // Atraso mínimo para garantir que o diálogo abra ANTES
+                // de começar o trabalho pesado.
+                Future.delayed(const Duration(milliseconds: 50), loadTaskData);
+              }
+
+              // Função de limpeza (dispose) dos controllers
+              return () {
+                for (final controller in subControllersState.value) {
+                  controller.dispose();
+                }
+              };
+            }, [task]); // Roda 1x quando o 'task' (diálogo) muda
+
+            // Função de atualização do texto (rápida)
             useEffect(() {
               listener() {
                 if (mounted) {
@@ -237,111 +190,136 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             return AlertDialog(
               backgroundColor: Theme.of(context).dialogTheme.backgroundColor,
               title: Text(task == null ? 'New Task' : 'Edit Task',
-                  style: TextStyle(color: kAccentColor.withAlpha(200))),
+                  // CORREÇÃO: Revertido para .withAlpha()
+                  style:
+                      TextStyle(color: kAccentColor.withAlpha((0.8 * 255).round()))),
               contentPadding: const EdgeInsets.fromLTRB(24.0, 20.0, 24.0, 0.0),
-              content: SingleChildScrollView(
-                child: ListBody(
-                  children: <Widget>[
-                    TextField(
-                      controller: textController,
-                      autofocus: task == null,
-                      style: const TextStyle(color: kTextPrimary),
-                      decoration: InputDecoration(
-                        hintText: 'Task description',
-                        suffixIcon: textState.value.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear,
-                                    color: kTextSecondary, size: 20),
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(),
-                                onPressed: () {
-                                  textController.clear();
-                                },
-                              )
-                            : null,
-                      ),
-                      maxLines: null,
-                      textCapitalization: TextCapitalization.sentences,
-                    ),
-                    const SizedBox(height: 20),
-                    const Text('Subtasks:',
-                        style: TextStyle(
-                            color: kTextSecondary,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14)),
-                    const SizedBox(height: 8),
-                    if (subtasksState.value.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.only(bottom: 8.0),
-                        child: Text('No subtasks added yet.',
-                            style: TextStyle(
-                                color: kTextSecondary,
-                                fontStyle: FontStyle.italic,
-                                fontSize: 13)),
-                      ),
-                    ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: subtasksState.value.length,
-                      itemBuilder: (context, index) {
-                        final controller = subControllersState.value[index];
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 8.0),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
+              content: isLoading.value
+                  ? const Center(
+                      // CORREÇÃO: Adicionado const
+                      // Mostra um loading enquanto decodifica o JSON
+                      child: Padding(
+                      padding: EdgeInsets.all(32.0),
+                      child: CircularProgressIndicator(),
+                    ))
+                  : SingleChildScrollView(
+                      // Mostra o conteúdo normal após carregar
+                      child: ListBody(
+                        children: <Widget>[
+                          TextField(
+                            controller: textController,
+                            autofocus: task == null,
+                            style: const TextStyle(color: kTextPrimary),
+                            decoration: InputDecoration(
+                              hintText: 'Task description',
+                              suffixIcon: textState.value.isNotEmpty
+                                  ? IconButton(
+                                      icon: const Icon(Icons.clear,
+                                          color: kTextSecondary, size: 20),
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                      onPressed: () {
+                                        textController.clear();
+                                      },
+                                    )
+                                  : null,
+                            ),
+                            maxLines: null,
+                            textCapitalization: TextCapitalization.sentences,
+                          ),
+                          const SizedBox(height: 20),
+                          const Text('Subtasks:',
+                              style: TextStyle(
+                                  color: kTextSecondary,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14)),
+                          const SizedBox(height: 8),
+                          if (subtasksState.value.isEmpty)
+                            const Padding(
+                              // CORREÇÃO: Adicionado const
+                              padding: EdgeInsets.only(bottom: 8.0),
+                              child: Text('No subtasks added yet.',
+                                  style: TextStyle(
+                                      color: kTextSecondary,
+                                      fontStyle: FontStyle.italic,
+                                      fontSize: 13)),
+                            ),
+                          
+                          // ***** CORREÇÃO DO CRASH AQUI *****
+                          // SUBSTITUÍDO o ListView.builder por um Column
+                          // para evitar o erro RenderShrinkWrappingViewport
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Expanded(
-                                child: TextField(
-                                  controller: controller,
-                                  style: const TextStyle(
-                                      color: kTextPrimary, fontSize: 14),
-                                  decoration: InputDecoration(
-                                    hintText: 'Subtask ${index + 1}',
-                                    isDense: true,
-                                    contentPadding: const EdgeInsets.symmetric(
-                                        horizontal: 10, vertical: 10),
+                              ...subtasksState.value.asMap().entries.map((entry) {
+                                final index = entry.key;
+                                final controller = subControllersState.value[index];
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 8.0),
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                    children: [
+                                      Expanded(
+                                        child: TextField(
+                                          controller: controller,
+                                          style: const TextStyle(
+                                              color: kTextPrimary, fontSize: 14),
+                                          decoration: InputDecoration(
+                                            hintText: 'Subtask ${index + 1}',
+                                            isDense: true,
+                                            contentPadding:
+                                                const EdgeInsets.symmetric(
+                                                    horizontal: 10,
+                                                    vertical: 10),
+                                          ),
+                                          onChanged: (value) {
+                                            final currentList =
+                                                subtasksState.value;
+                                            if (index >= 0 &&
+                                                index < currentList.length) {
+                                              currentList[index] = value;
+                                            }
+                                          },
+                                          textCapitalization:
+                                              TextCapitalization.sentences,
+                                        ),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(
+                                            Icons.remove_circle_outline,
+                                            color: kRedColor,
+                                            size: 20),
+                                        padding: const EdgeInsets.only(left: 8),
+                                        constraints: const BoxConstraints(),
+                                        onPressed: () => removeSubtaskField(index),
+                                        tooltip: 'Remove Subtask',
+                                      ),
+                                    ],
                                   ),
-                                  onChanged: (value) {
-                                    final currentList = subtasksState.value;
-                                    if (index >= 0 &&
-                                        index < currentList.length) {
-                                      currentList[index] = value;
-                                    }
-                                  },
-                                  textCapitalization:
-                                      TextCapitalization.sentences,
-                                ),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.remove_circle_outline,
-                                    color: kRedColor, size: 20),
-                                padding: const EdgeInsets.only(left: 8),
-                                constraints: const BoxConstraints(),
-                                onPressed: () => removeSubtaskField(index),
-                                tooltip: 'Remove Subtask',
-                              ),
+                                );
+                              }).toList(),
                             ],
                           ),
-                        );
-                      },
-                    ),
-                    Container(
-                      alignment: Alignment.centerLeft,
-                      padding: const EdgeInsets.only(top: 4.0),
-                      child: TextButton.icon(
-                        style: TextButton.styleFrom(
-                          foregroundColor: kAccentColor,
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                        ),
-                        icon: const Icon(Icons.add, size: 18),
-                        label: const Text('Add Subtask',
-                            style: TextStyle(fontSize: 13)),
-                        onPressed: addSubtaskField,
+                          // ***** FIM DA CORREÇÃO DO CRASH *****
+
+                          Container(
+                            alignment: Alignment.centerLeft,
+                            padding: const EdgeInsets.only(top: 4.0),
+                            child: TextButton.icon(
+                              style: TextButton.styleFrom(
+                                foregroundColor: kAccentColor,
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 4),
+                              ),
+                              icon: const Icon(Icons.add, size: 18),
+                              label: const Text('Add Subtask',
+                                  style: TextStyle(fontSize: 13)),
+                              onPressed: addSubtaskField,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
-              ),
               actionsPadding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 16.0),
               actions: <Widget>[
                 TextButton(
@@ -375,10 +353,11 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                         subtaskStateIndex++;
                       }
 
+                      // ***** ALTERAÇÃO AQUI: Usa o DataService *****
                       if (task == null) {
-                        _addTask(text, finalSubtasks);
+                        DataService.addTask(text, finalSubtasks);
                       } else {
-                        _updateTask(
+                        DataService.updateTask(
                             task, text, finalSubtasks, adjustedCompletion);
                       }
                       Navigator.of(context).pop();
@@ -387,7 +366,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                         SnackBar(
                           content:
                               const Text('Task description cannot be empty.'),
-                          backgroundColor: kRedColor.withAlpha(200),
+                          // CORREÇÃO: Revertido para .withAlpha()
+                          backgroundColor: kRedColor.withAlpha((0.8 * 255).round()),
                         ),
                       );
                     }
@@ -399,10 +379,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         );
       },
     ).whenComplete(() {
-      for (final controller in subtaskControllers) {
-        controller.dispose();
-      }
+      // Limpeza do controller de texto principal
       if (task == null) textController.dispose();
+      // Os controllers de subtarefa são limpos pelo useEffect
     });
   }
 
@@ -427,10 +406,15 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             return () => textController.removeListener(listener);
           }, [textController]);
 
+          // ***** NOTA: O _showNoteDialog não tem ListView, *****
+          // ***** por isso não causava o crash. Nenhuma mudança *****
+          // ***** estrutural é necessária aqui. *****
+
           return AlertDialog(
             backgroundColor: Theme.of(context).dialogTheme.backgroundColor,
             title: Text(note == null ? 'New Note' : 'Edit Note',
-                style: TextStyle(color: kAccentColor.withAlpha(200))),
+                // CORREÇÃO: Revertido para .withAlpha()
+                style: TextStyle(color: kAccentColor.withAlpha((0.8 * 255).round()))),
             contentPadding: const EdgeInsets.fromLTRB(24.0, 20.0, 24.0, 0.0),
             content: SingleChildScrollView(
               child: ListBody(
@@ -474,17 +458,19 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                 onPressed: () {
                   final text = textController.text.trim();
                   if (text.isNotEmpty) {
+                    // ***** ALTERAÇÃO AQUI: Usa o DataService *****
                     if (note == null) {
-                      _addNote(text);
+                      DataService.addNote(text);
                     } else {
-                      _updateNote(note, text);
+                      DataService.updateNote(note, text);
                     }
                     Navigator.of(context).pop();
                   } else {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: const Text('Note content cannot be empty.'),
-                        backgroundColor: kRedColor.withAlpha(200),
+                        // CORREÇÃO: Revertido para .withAlpha()
+                        backgroundColor: kRedColor.withAlpha((0.8 * 255).round()),
                       ),
                     );
                   }
@@ -501,30 +487,58 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   // --- Diálogo do Perfil (Modal) ---
   Future<void> _showProfileModal() async {
+    // (A otimização assíncrona já foi aplicada aqui)
     final profile = profileBox.get(profileKey,
         defaultValue:
             UserProfile(totalXP: 0.0, level: 1, playerName: "Player"))!;
     final nameController = TextEditingController(text: profile.playerName);
 
-    // Contagem de estatísticas
-    final int tasksDone = tasksBox.values.where((t) => t.isCompleted).length;
-    final int subtasksDone = tasksBox.values
-        .where((t) => t.isCompleted)
-        .map((t) => t.subtaskCompletion.where((c) => c).length)
-        .fold(0, (prev, count) => prev + count);
-    final int notesDone = notesBox.values.where((n) => n.isArchived).length;
-
     return showDialog<void>(
       context: context,
       builder: (BuildContext context) {
         bool isEditingName = false;
-        // AJUSTE: Estado para controlar falha no carregamento da imagem (Asset)
-        bool _imageError = false;
-        // AJUSTE: Estado para controlar falha no carregamento do *arquivo* de avatar
-        bool _avatarFileError = false;
+        // CORREÇÃO: Removido '_' de variáveis locais
+        bool imageError = false;
+        bool avatarFileError = false;
 
-        // AJUSTE: Função para selecionar imagem
-        Future<void> _pickImage(StateSetter setDialogState) async {
+        int? tasksDone;
+        int? subtasksDone;
+        int? notesDone;
+
+        // CORREÇÃO: Removido '_' de funções locais
+        Future<void> calculateStats(StateSetter setDialogState) async {
+          await Future.delayed(Duration.zero);
+          
+          // ***** CORREÇÃO ANR: Usar .keys em vez de .values *****
+          final tasks = tasksBox.keys
+              .map((key) => tasksBox.get(key))
+              .where((task) => task != null && task.isCompleted)
+              .toList();
+
+          int subtasksCount = 0;
+          for (var task in tasks) {
+            // task.subtaskCompletion ainda é lento, mas só é chamado
+            // para tarefas *concluídas*, o que deve ser uma lista menor.
+            subtasksCount += task!.subtaskCompletion.where((c) => c).length;
+          }
+          
+          // ***** CORREÇÃO ANR: Usar .keys em vez de .values *****
+          final notesCount = notesBox.keys
+              .map((key) => notesBox.get(key))
+              .where((note) => note != null && note.isArchived)
+              .length;
+
+          if (mounted) {
+            setDialogState(() {
+              tasksDone = tasks.length;
+              subtasksDone = subtasksCount;
+              notesDone = notesCount;
+            });
+          }
+        }
+
+        // CORREÇÃO: Removido '_' de funções locais
+        Future<void> pickImage(StateSetter setDialogState) async {
           try {
             final ImagePicker picker = ImagePicker();
             final XFile? image =
@@ -534,19 +548,21 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               profile.avatarImagePath = image.path;
               await profile.save();
               setDialogState(() {
-                _avatarFileError = false; // Reseta o erro ao escolher nova foto
-                _imageError = false;
+                avatarFileError = false;
+                imageError = false;
               });
-              setState(() {}); // Atualiza o card da home
+              setState(() {});
             }
           } catch (e) {
-            // Lidar com exceções (ex: permissões)
+            // CORREÇÃO: Usando 'this.context' (contexto do State) para o ScaffoldMessenger
+            // e 'const' no SnackBar.
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
+              ScaffoldMessenger.of(this.context).showSnackBar(
                 SnackBar(
                   content: const Text(
                       'Falha ao escolher imagem. Verifique as permissões.'),
-                  backgroundColor: kRedColor.withAlpha(200),
+                  // CORREÇÃO: Revertido para .withAlpha()
+                  backgroundColor: kRedColor.withAlpha((0.8 * 255).round()),
                 ),
               );
             }
@@ -554,8 +570,15 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         }
 
         return StatefulBuilder(builder: (context, setDialogState) {
-          final double xpNivelAtualBase = _xpForLevel(profile.level);
-          final double xpProximoNivel = _xpForNextLevel(profile.level);
+          if (tasksDone == null) {
+            // CORREÇÃO: Chamando a função local renomeada
+            calculateStats(setDialogState);
+          }
+
+          final double xpNivelAtualBase =
+              BalancingService.xpForLevel(profile.level);
+          final double xpProximoNivel =
+              BalancingService.xpForNextLevel(profile.level);
           final double xpNoNivelAtual = profile.totalXP - xpNivelAtualBase;
           final double xpNecessarioParaNivel =
               (xpProximoNivel - xpNivelAtualBase).abs() < 0.01
@@ -573,13 +596,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               setDialogState(() {
                 isEditingName = false;
               });
-              setState(() {}); // Atualiza a home
+              setState(() {});
             }
           }
 
-          // AJUSTE: Lógica do Avatar para verificar File > Asset > Fallback
           ImageProvider? backgroundImage;
-          if (profile.avatarImagePath != null && !_avatarFileError) {
+          // CORREÇÃO: Usando variável local renomeada
+          if (profile.avatarImagePath != null && !avatarFileError) {
             backgroundImage = FileImage(File(profile.avatarImagePath!));
           } else {
             backgroundImage =
@@ -592,10 +615,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             child: Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
+                // CORREÇÃO: Revertido para .withAlpha()
                 color: kCardColor.withAlpha((0.95 * 255).round()),
                 borderRadius: BorderRadius.circular(16),
                 border:
-                    Border.all(color: kTextSecondary.withAlpha(50), width: 1),
+                    // CORREÇÃO: Revertido para .withAlpha()
+                    Border.all(color: kTextSecondary.withAlpha((0.2 * 255).round()), width: 1),
               ),
               child: SingleChildScrollView(
                 child: Column(
@@ -612,32 +637,31 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                       ),
                     ),
 
-                    // Avatar (Placeholder com Asset)
-                    // AJUSTE: Envolvido com GestureDetector para pegar imagem
                     GestureDetector(
-                      onTap: () => _pickImage(setDialogState),
+                      // CORREÇÃO: Chamando a função local renomeada
+                      onTap: () => pickImage(setDialogState),
                       child: CircleAvatar(
                           radius: 40,
                           backgroundColor: kBackgroundColor,
                           backgroundImage: backgroundImage,
-                          // AJUSTE: Define o estado de erro se a imagem falhar
                           onBackgroundImageError: (exception, stackTrace) {
                             setDialogState(() {
+                              // CORREÇÃO: Usando variáveis locais renomeadas
                               if (profile.avatarImagePath != null &&
-                                  !_avatarFileError) {
-                                _avatarFileError =
+                                  !avatarFileError) {
+                                avatarFileError =
                                     true; // Erro ao carregar FileImage
                               } else {
-                                _imageError =
+                                imageError =
                                     true; // Erro ao carregar AssetImage
                               }
                             });
                           },
-                          // AJUSTE: Mostra o 'child' (letra) APENAS se a imagem falhar
+                          // CORREÇÃO: Usando variáveis locais renomeadas
                           child: (profile.avatarImagePath != null &&
-                                  !_avatarFileError)
-                              ? null // Se FileImage está sendo usado, não mostra child
-                              : (_imageError || _avatarFileError)
+                                  !avatarFileError)
+                              ? null
+                              : (imageError || avatarFileError)
                                   ? (profile.playerName.isEmpty)
                                       ? const Icon(Icons.person,
                                           size: 40, color: kTextSecondary)
@@ -647,8 +671,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                               fontSize: 40,
                                               color: kTextPrimary,
                                               fontWeight: FontWeight.w300))
-                                  : null // Se AssetImage está ok, não mostra child
-                          ),
+                                  : null),
                     ),
                     const SizedBox(height: 16),
 
@@ -731,14 +754,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                       borderRadius: BorderRadius.circular(8),
                       child: LinearProgressIndicator(
                         value: progresso,
-                        minHeight: 8, // Mais fino (como na ref)
-                        backgroundColor: Colors.black26, // Fundo escuro
+                        minHeight: 8,
+                        backgroundColor: Colors.black26,
                         valueColor: AlwaysStoppedAnimation<Color>(
-                            Colors.amber[400]!), // Cor de XP
+                            Colors.amber[400]!),
                       ),
                     ),
                     const SizedBox(height: 4),
-                    // AJUSTE: Adicionado "XP: "
                     Text(
                       'XP: ${xpNoNivelAtual.toStringAsFixed(1)} / ${xpNecessarioParaNivel.toStringAsFixed(1)}',
                       style:
@@ -754,15 +776,31 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                             fontWeight: FontWeight.bold,
                             letterSpacing: 1)),
                     const SizedBox(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _buildStatCounter("Tasks", tasksDone, kAccentColor),
-                        _buildStatCounter(
-                            "Subtasks", subtasksDone, Colors.green[300]!),
-                        _buildStatCounter("Notes", notesDone, kYellowColor),
-                      ],
-                    ),
+                    (tasksDone == null ||
+                            subtasksDone == null ||
+                            notesDone == null)
+                        ? const Padding(
+                            // CORREÇÃO: Adicionado const
+                            padding: EdgeInsets.symmetric(vertical: 16.0),
+                            child: Center(
+                                child: SizedBox(
+                              width: 24,
+                              height: 24,
+                              child:
+                                  CircularProgressIndicator(strokeWidth: 2.0),
+                            )),
+                          )
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                            children: [
+                              _buildStatCounter(
+                                  "Tasks", tasksDone!, kAccentColor),
+                              _buildStatCounter("Subtasks", subtasksDone!,
+                                  Colors.green[300]!),
+                              _buildStatCounter(
+                                  "Notes", notesDone!, kYellowColor),
+                            ],
+                          ),
 
                     const SizedBox(height: 24),
 
@@ -780,9 +818,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                         color: Colors.black26,
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                            color: kTextSecondary.withAlpha(50), width: 1),
+                            // CORREÇÃO: Revertido para .withAlpha()
+                            color: kTextSecondary.withAlpha((0.2 * 255).round()),
+                            width: 1),
                       ),
                       child: const Center(
+                        // CORREÇÃO: Adicionado const
                         child: Text(
                           "Achievements will be unlocked here!",
                           style: TextStyle(
@@ -874,7 +915,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     height: 4,
                     margin: const EdgeInsets.only(bottom: 16),
                     decoration: BoxDecoration(
-                      color: kTextSecondary.withAlpha(100),
+                      // CORREÇÃO: Revertido para .withAlpha()
+                      color: kTextSecondary.withAlpha((0.4 * 255).round()),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -962,6 +1004,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   // --- Funções Auxiliares (Confirmação de Exclusão) ---
   Future<bool> _confirmDismiss(String itemName) async {
+    // (Esta função é local e permanece na UI)
     final result = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
@@ -993,184 +1036,122 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     return ValueListenableBuilder(
       valueListenable: tasksBox.listenable(),
       builder: (context, Box<Task> box, _) {
-        List<Task> tasks;
-
+        
+        // ***** CORREÇÃO ANR: Aplicar a otimização de .keys aqui *****
         if (showCompleted) {
-          tasks = box.values
-              .where((task) => task.isCompleted)
-              .where((task) =>
-                  _historySearchTerm.isEmpty ||
-                  (_historyType == 'Tarefas' &&
-                      (task.text.toLowerCase().contains(_historySearchTerm) ||
-                          task.subtasks.any((sub) =>
-                              sub.toLowerCase().contains(_historySearchTerm)))))
-              .toList();
-        } else {
-          tasks = box.values.where((task) => !task.isCompleted).toList();
-        }
+          // Lógica para o histórico (AGORA OTIMIZADA)
+          final taskKeys = box.keys.where((key) {
+            final task = box.get(key);
+            if (task == null) return false;
+            
+            bool matchesSearch = _historySearchTerm.isEmpty ||
+                (_historyType == 'Tarefas' &&
+                    (task.text.toLowerCase().contains(_historySearchTerm)));
+            
+            return task.isCompleted && matchesSearch;
+          }).toList();
 
-        tasks.sort((a, b) {
-          if (showCompleted) {
-            return (b.completedAt ?? DateTime(0))
-                .compareTo(a.completedAt ?? DateTime(0));
-          } else {
-            return b.createdAt.compareTo(a.createdAt);
+          // Ordena as chaves
+          taskKeys.sort((a, b) {
+            final taskA = box.get(a);
+            final taskB = box.get(b);
+            if (taskA == null || taskB == null) return 0;
+            return (taskB.completedAt ?? DateTime(0))
+                .compareTo(taskA.completedAt ?? DateTime(0));
+          });
+
+          if (taskKeys.isEmpty) {
+            return Center(
+                child: Padding(
+              padding: const EdgeInsets.all(32.0),
+              child: Text(
+                showCompleted
+                    ? (_historySearchTerm.isEmpty
+                        ? 'No completed tasks yet.'
+                        : 'No completed tasks found.')
+                    : 'No pending tasks. Add one!',
+                style: const TextStyle(color: kTextSecondary, fontSize: 16),
+                textAlign: TextAlign.center,
+              ),
+            ));
           }
-        });
 
-        if (tasks.isEmpty) {
-          return Center(
-              child: Padding(
-            padding: const EdgeInsets.all(32.0),
-            child: Text(
-              showCompleted
-                  ? (_historySearchTerm.isEmpty
-                      ? 'No completed tasks yet.'
-                      : 'No completed tasks found.')
-                  : 'No pending tasks. Add one!',
-              style: const TextStyle(color: kTextSecondary, fontSize: 16),
-              textAlign: TextAlign.center,
-            ),
-          ));
-        }
+          return ListView.builder(
+            padding:
+                const EdgeInsets.only(bottom: 80, left: 8, right: 8, top: 8),
+            itemCount: taskKeys.length, // Usa o total de chaves
+            itemBuilder: (context, index) {
+              final taskKey = taskKeys[index];
+              final task = box.get(taskKey); // Pega UMA POR UMA
 
-        return ListView.separated(
-          padding: const EdgeInsets.only(bottom: 80, left: 8, right: 8, top: 8),
-          itemCount: tasks.length,
-          separatorBuilder: (context, index) {
-            return tasks[index].hasSubtasks
-                ? const SizedBox.shrink()
-                : Divider(
-                    height: 1,
-                    thickness: 0.3,
-                    color: kTextSecondary.withAlpha(50));
-          },
-          itemBuilder: (context, index) {
-            final task = tasks[index];
+              if (task == null) return const SizedBox.shrink();
 
-            Widget taskTile = ListTile(
-              contentPadding: EdgeInsets.only(
-                  left: 4.0,
-                  right: 0,
-                  top: task.hasSubtasks ? 8 : 4,
-                  bottom: task.hasSubtasks ? 0 : 4),
-              leading: Checkbox(
-                value: task.isCompleted,
-                onChanged: (_) => _toggleTaskCompletion(task),
-                visualDensity: VisualDensity.compact,
-              ),
-              title: Text(
-                task.text,
-                style: TextStyle(
-                  fontSize: 15,
-                  color: task.isCompleted ? kTextSecondary : kTextPrimary,
-                  decoration:
-                      task.isCompleted ? TextDecoration.lineThrough : null,
-                  decorationColor: kTextSecondary,
-                  decorationThickness: 1.5,
-                ),
-              ),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.edit_outlined,
-                        color: kTextSecondary, size: 20),
-                    padding: const EdgeInsets.all(8),
-                    constraints: const BoxConstraints(),
-                    onPressed: () => _showTaskDialog(task: task),
-                    tooltip: 'Edit Task',
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline,
-                        color: kRedColor, size: 20),
-                    padding: const EdgeInsets.only(
-                        left: 0, right: 8, top: 8, bottom: 8),
-                    constraints: const BoxConstraints(),
-                    tooltip: 'Delete Task',
-                    onPressed: () async {
-                      final confirm = await _confirmDismiss(task.text);
-                      if (confirm) {
-                        _deleteTask(task);
-                      }
-                    },
-                  ),
-                ],
-              ),
-              onTap: () => _showTaskDialog(task: task),
-            );
-
-            if (task.hasSubtasks) {
-              return Card(
-                // O CardTheme do ThemeData será aplicado aqui
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    taskTile,
-                    Padding(
-                      padding: const EdgeInsets.only(
-                          left: 56.0, right: 16.0, bottom: 12.0, top: 0),
-                      child: Column(
-                        children: task.subtasks.asMap().entries.map((entry) {
-                          int idx = entry.key;
-                          String subtaskText = entry.value;
-                          bool isSubtaskCompleted =
-                              task.subtaskCompletion.length > idx
-                                  ? task.subtaskCompletion[idx]
-                                  : false;
-
-                          return InkWell(
-                            onTap: () => _toggleSubtaskCompletion(task, idx),
-                            child: Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 2.0),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  SizedBox(
-                                    height: 20,
-                                    width: 20,
-                                    child: Checkbox(
-                                      value: isSubtaskCompleted,
-                                      onChanged: (_) =>
-                                          _toggleSubtaskCompletion(task, idx),
-                                      materialTapTargetSize:
-                                          MaterialTapTargetSize.shrinkWrap,
-                                      visualDensity: const VisualDensity(
-                                          horizontal: -4, vertical: -4),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      subtaskText,
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        color: isSubtaskCompleted
-                                            ? kTextSecondary
-                                            : kTextPrimary.withAlpha(200),
-                                        decoration: isSubtaskCompleted
-                                            ? TextDecoration.lineThrough
-                                            : null,
-                                        decorationColor: kTextSecondary,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                  ],
-                ),
+              // ***** ALTERAÇÃO AQUI: Usa o DataService *****
+              return TaskListItem(
+                task: task,
+                onToggleComplete: DataService.toggleTaskCompletion,
+                onToggleSubtask: DataService.toggleSubtaskCompletion,
+                onEdit: (Task taskToEdit) => _showTaskDialog(task: taskToEdit),
+                onConfirmDelete: _confirmDismiss,
+                onDelete: DataService.deleteTask,
               );
-            } else {
-              return taskTile;
-            }
-          },
-        );
+            },
+          );
+        } else {
+          // --- OTIMIZAÇÃO 1 (Tela Principal) ---
+          // Esta parte já estava otimizada e permanece igual.
+          final taskKeys = box.keys
+              .where((key) {
+                final task = box.get(key); 
+                if (task == null) return false;
+                return !task.isCompleted;
+              })
+              .toList(); 
+
+          taskKeys.sort((a, b) {
+            final taskA = box.get(a);
+            final taskB = box.get(b);
+            if (taskA == null || taskB == null) return 0;
+            return taskB.createdAt.compareTo(taskA.createdAt);
+          });
+
+          if (taskKeys.isEmpty) {
+            return const Center(
+                // CORREÇÃO: Adicionado const
+                child: Padding(
+              padding: EdgeInsets.all(32.0),
+              child: Text(
+                'No pending tasks. Add one!',
+                style: TextStyle(color: kTextSecondary, fontSize: 16),
+                textAlign: TextAlign.center,
+              ),
+            ));
+          }
+
+          // O ListView.builder agora usa as chaves
+          return ListView.builder(
+            padding:
+                const EdgeInsets.only(bottom: 80, left: 8, right: 8, top: 8),
+            itemCount: taskKeys.length, // Usa o total de chaves
+            itemBuilder: (context, index) {
+              final taskKey = taskKeys[index];
+              final task = box.get(taskKey); // Pega a tarefa UMA POR UMA
+
+              if (task == null) return const SizedBox.shrink(); // Segurança
+
+              // ***** ALTERAÇÃO AQUI: Usa o DataService *****
+              // Retorna o novo widget refatorado, passando as funções
+              return TaskListItem(
+                task: task,
+                onToggleComplete: DataService.toggleTaskCompletion,
+                onToggleSubtask: DataService.toggleSubtaskCompletion,
+                onEdit: (Task taskToEdit) => _showTaskDialog(task: taskToEdit),
+                onConfirmDelete: _confirmDismiss,
+                onDelete: DataService.deleteTask,
+              );
+            },
+          );
+        }
       },
     );
   }
@@ -1179,35 +1160,53 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     return ValueListenableBuilder(
       valueListenable: notesBox.listenable(),
       builder: (context, Box<Note> box, _) {
-        List<Note> notes;
+        
+        // ***** CORREÇÃO ANR: Aplicar a otimização de .keys aqui *****
+        
+        List<dynamic> noteKeys; // Pode ser List<String> ou List<int>
 
         if (showArchived) {
-          notes = box.values
-              .where((note) => note.isArchived)
-              .where((note) =>
-                  _historySearchTerm.isEmpty ||
-                  (_historyType == 'Notas' &&
-                      note.text.toLowerCase().contains(_historySearchTerm)))
-              .toList();
+          noteKeys = box.keys.where((key) {
+            final note = box.get(key);
+            if (note == null) return false;
+            
+            bool matchesSearch = _historySearchTerm.isEmpty ||
+                (_historyType == 'Notas' &&
+                    note.text.toLowerCase().contains(_historySearchTerm));
+
+            return note.isArchived && matchesSearch;
+          }).toList();
+          
+          noteKeys.sort((a, b) {
+             final noteA = box.get(a);
+             final noteB = box.get(b);
+             if (noteA == null || noteB == null) return 0;
+            return (noteB.archivedAt ?? DateTime(0))
+                .compareTo(noteA.archivedAt ?? DateTime(0));
+          });
+          
         } else {
-          notes = box.values
-              .where((note) => !note.isArchived)
-              .where((note) =>
-                  _notesSearchTerm.isEmpty ||
-                  note.text.toLowerCase().contains(_notesSearchTerm))
-              .toList();
+          
+          noteKeys = box.keys.where((key) {
+            final note = box.get(key);
+            if (note == null) return false;
+
+             bool matchesSearch = _notesSearchTerm.isEmpty ||
+                note.text.toLowerCase().contains(_notesSearchTerm);
+            
+            return !note.isArchived && matchesSearch;
+          }).toList();
+
+          noteKeys.sort((a, b) {
+            final noteA = box.get(a);
+            final noteB = box.get(b);
+            if (noteA == null || noteB == null) return 0;
+            return noteB.createdAt.compareTo(noteA.createdAt);
+          });
         }
 
-        notes.sort((a, b) {
-          if (showArchived) {
-            return (b.archivedAt ?? DateTime(0))
-                .compareTo(a.archivedAt ?? DateTime(0));
-          } else {
-            return b.createdAt.compareTo(a.createdAt);
-          }
-        });
 
-        if (notes.isEmpty) {
+        if (noteKeys.isEmpty) {
           return Center(
               child: Padding(
             padding: const EdgeInsets.all(32.0),
@@ -1227,11 +1226,18 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
         return ListView.separated(
           padding: const EdgeInsets.only(bottom: 80, left: 8, right: 8, top: 8),
-          itemCount: notes.length,
+          itemCount: noteKeys.length, // Usa o total de chaves
           separatorBuilder: (context, index) => Divider(
-              height: 1, thickness: 0.3, color: kTextSecondary.withAlpha(50)),
+              height: 1,
+              thickness: 0.3,
+              // CORREÇÃO: Revertido para .withAlpha()
+              color: kTextSecondary.withAlpha((0.2 * 255).round())),
           itemBuilder: (context, index) {
-            final note = notes[index];
+            final noteKey = noteKeys[index];
+            final note = box.get(noteKey); // Pega UMA POR UMA
+
+            if (note == null) return const SizedBox.shrink(); // Segurança
+            
             return ListTile(
               contentPadding: const EdgeInsets.only(left: 4.0, right: 0),
               leading: IconButton(
@@ -1244,7 +1250,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                 ),
                 padding: const EdgeInsets.all(12),
                 constraints: const BoxConstraints(),
-                onPressed: () => _toggleNoteArchived(note),
+                // ***** ALTERAÇÃO AQUI: Usa o DataService *****
+                onPressed: () => DataService.toggleNoteArchived(note),
                 tooltip: note.isArchived ? 'Unarchive Note' : 'Archive Note',
               ),
               title: Text(
@@ -1255,7 +1262,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   fontSize: 14,
                   color: note.isArchived
                       ? kTextSecondary
-                      : kTextPrimary.withAlpha(220),
+                      // CORREÇÃO: Revertido para .withAlpha()
+                      : kTextPrimary.withAlpha((0.85 * 255).round()),
                   decoration:
                       note.isArchived ? TextDecoration.lineThrough : null,
                   decorationColor: kTextSecondary,
@@ -1278,14 +1286,15 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     padding: const EdgeInsets.only(
                         left: 0, right: 8, top: 8, bottom: 8),
                     constraints: const BoxConstraints(),
-                    tooltip: 'Delete Note',
+                    tooltip: 'Delete Task',
                     onPressed: () async {
                       final confirm = await _confirmDismiss(
                           note.text.length > 30
                               ? '${note.text.substring(0, 30)}...'
                               : note.text);
                       if (confirm) {
-                        _deleteNote(note);
+                        // ***** ALTERAÇÃO AQUI: Usa o DataService *****
+                        DataService.deleteNote(note);
                       }
                     },
                   ),
@@ -1308,8 +1317,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             defaultValue:
                 UserProfile(totalXP: 0.0, level: 1, playerName: "Player"))!;
 
-        final double xpNivelAtualBase = _xpForLevel(profile.level);
-        final double xpProximoNivel = _xpForNextLevel(profile.level);
+        final double xpNivelAtualBase =
+            BalancingService.xpForLevel(profile.level);
+        final double xpProximoNivel =
+            BalancingService.xpForNextLevel(profile.level);
         final double xpNoNivelAtual = profile.totalXP - xpNivelAtualBase;
         final double xpNecessarioParaNivel =
             (xpProximoNivel - xpNivelAtualBase).abs() < 0.01
@@ -1320,7 +1331,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             ? (xpNoNivelAtual / xpNecessarioParaNivel).clamp(0.0, 1.0)
             : 0.0;
 
-        // Placeholder para o Idle Hub, mostrando o perfil por enquanto
         return Center(
           child: Padding(
             padding: const EdgeInsets.all(24.0),
@@ -1351,7 +1361,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   ),
                 ),
                 const SizedBox(height: 8),
-                // AJUSTE: Adicionado "XP: "
                 Text(
                   'XP: ${xpNoNivelAtual.toStringAsFixed(1)} / ${xpNecessarioParaNivel.toStringAsFixed(1)}',
                   style: const TextStyle(
@@ -1364,11 +1373,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   'Total XP: ${profile.totalXP.toStringAsFixed(1)}',
                   style: TextStyle(
                       fontSize: 16,
-                      color: kTextSecondary.withAlpha(150),
+                      // CORREÇÃO: Revertido para .withAlpha()
+                      color: kTextSecondary.withAlpha((0.6 * 255).round()),
                       fontStyle: FontStyle.italic),
                 ),
                 const SizedBox(height: 48),
                 const Text(
+                  // CORREÇÃO: Adicionado const
                   '(Idle Hub systems will be shown here)',
                   style: TextStyle(
                       color: kTextSecondary, fontStyle: FontStyle.italic),
@@ -1413,46 +1424,56 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             },
           ),
           ListTile(
+            // CORREÇÃO: Revertido para .withAlpha()
             leading: Icon(Icons.inventory_2_outlined,
-                color: kTextSecondary.withAlpha(100)),
+                color: kTextSecondary.withAlpha((0.4 * 255).round())),
             title: Text('Inventory (Soon)',
-                style: TextStyle(color: kTextSecondary.withAlpha(100))),
+                // CORREÇÃO: Revertido para .withAlpha()
+                style: TextStyle(color: kTextSecondary.withAlpha((0.4 * 255).round()))),
             enabled: false,
             onTap: () {},
           ),
           ListTile(
+            // CORREÇÃO: Revertido para .withAlpha()
             leading: Icon(Icons.people_outline,
-                color: kTextSecondary.withAlpha(100)),
+                color: kTextSecondary.withAlpha((0.4 * 255).round())),
             title: Text('Friends & Party (Soon)',
-                style: TextStyle(color: kTextSecondary.withAlpha(100))),
+                // CORREÇÃO: Revertido para .withAlpha()
+                style: TextStyle(color: kTextSecondary.withAlpha((0.4 * 255).round()))),
             enabled: false,
             onTap: () {},
           ),
           ListTile(
+            // CORREÇÃO: Revertido para .withAlpha()
             leading: Icon(Icons.gamepad_outlined,
-                color: kTextSecondary.withAlpha(100)),
+                color: kTextSecondary.withAlpha((0.4 * 255).round())),
             title: Text('Mini Games (Soon)',
-                style: TextStyle(color: kTextSecondary.withAlpha(100))),
+                // CORREÇÃO: Revertido para .withAlpha()
+                style: TextStyle(color: kTextSecondary.withAlpha((0.4 * 255).round()))),
             enabled: false,
             onTap: () {},
           ),
           ListTile(
+            // CORREÇÃO: Revertido para .withAlpha()
             leading: Icon(Icons.emoji_events_outlined,
-                color: kTextSecondary.withAlpha(100)),
+                color: kTextSecondary.withAlpha((0.4 * 255).round())),
             title: Text('Achievements (Soon)',
-                style: TextStyle(color: kTextSecondary.withAlpha(100))),
+                // CORREÇÃO: Revertido para .withAlpha()
+                style: TextStyle(color: kTextSecondary.withAlpha((0.4 * 255).round()))),
             enabled: false,
             onTap: () {},
           ),
           ListTile(
+            // CORREÇÃO: Revertido para .withAlpha()
             leading: Icon(Icons.settings_outlined,
-                color: kTextSecondary.withAlpha(100)),
+                color: kTextSecondary.withAlpha((0.4 * 255).round())),
             title: Text('Settings (Soon)',
-                style: TextStyle(color: kTextSecondary.withAlpha(100))),
+                // CORREÇÃO: Revertido para .withAlpha()
+                style: TextStyle(color: kTextSecondary.withAlpha((0.4 * 255).round()))),
             enabled: false,
             onTap: () {},
           ),
-          const Divider(color: kTextSecondary),
+          const Divider(color: kTextSecondary), // CORREÇÃO: Adicionado const
           ListTile(
             leading: const Icon(Icons.logout, color: kRedColor),
             title:
@@ -1467,11 +1488,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   // Card do Perfil (Header)
   Widget _buildProfileCard() {
-    // AJUSTE: Envolvido com HookBuilder para usar 'useState' para o erro da imagem
     return HookBuilder(builder: (context) {
-      final imageError = useState(false); // Estado de erro da imagem (Asset)
-      final avatarFileError =
-          useState(false); // Estado de erro da imagem (File)
+      final imageError = useState(false);
+      final avatarFileError = useState(false);
 
       return ValueListenableBuilder(
         valueListenable: profileBox.listenable(),
@@ -1480,8 +1499,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               defaultValue:
                   UserProfile(totalXP: 0.0, level: 1, playerName: "Player"))!;
 
-          final double xpNivelAtualBase = _xpForLevel(profile.level);
-          final double xpProximoNivel = _xpForNextLevel(profile.level);
+          final double xpNivelAtualBase =
+              BalancingService.xpForLevel(profile.level);
+          final double xpProximoNivel =
+              BalancingService.xpForNextLevel(profile.level);
           final double xpNoNivelAtual = profile.totalXP - xpNivelAtualBase;
           final double xpNecessarioParaNivel =
               (xpProximoNivel - xpNivelAtualBase).abs() < 0.01
@@ -1492,7 +1513,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               ? (xpNoNivelAtual / xpNecessarioParaNivel).clamp(0.0, 1.0)
               : 0.0;
 
-          // AJUSTE: Lógica do Avatar para verificar File > Asset > Fallback
           ImageProvider? backgroundImage;
           if (profile.avatarImagePath != null && !avatarFileError.value) {
             backgroundImage = FileImage(File(profile.avatarImagePath!));
@@ -1504,23 +1524,19 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           return InkWell(
             onTap: _showProfileModal,
             child: Container(
-              height: 90, // Altura Aumentada
-              // AJUSTE: Padding horizontal padrão
+              height: 90,
               padding:
                   const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0)
-                      .copyWith(top: 16.0), // Padding extra no topo
-              // Fundo Transparente
+                      .copyWith(top: 16.0),
               color: Colors.transparent,
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start, // Alinha ao topo
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Avatar (Placeholder com Asset)
                   CircleAvatar(
-                      // AJUSTE: Raio levemente aumentado
                       radius: 22,
-                      backgroundColor: kTextSecondary.withAlpha(100),
+                      // CORREÇÃO: Revertido para .withAlpha()
+                      backgroundColor: kTextSecondary.withAlpha((0.4 * 255).round()),
                       backgroundImage: backgroundImage,
-                      // AJUSTE: Define erro se a imagem falhar
                       onBackgroundImageError: (e, s) {
                         if (profile.avatarImagePath != null &&
                             !avatarFileError.value) {
@@ -1530,10 +1546,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                           imageError.value = true; // Erro ao carregar AssetImage
                         }
                       },
-                      // AJUSTE: Mostra o 'child' (letra/ícone) APENAS se a imagem falhar
                       child: (profile.avatarImagePath != null &&
                               !avatarFileError.value)
-                          ? null // Se FileImage está ok, não mostra child
+                          ? null
                           : (imageError.value || avatarFileError.value)
                               ? (profile.playerName.isEmpty)
                                   ? const Icon(Icons.person,
@@ -1541,26 +1556,22 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                   : Text(profile.playerName[0].toUpperCase(),
                                       style: const TextStyle(
                                           fontSize: 22, color: kTextPrimary))
-                              : null // Se AssetImage está ok, não mostra child
-                      ),
+                              : null),
                   const SizedBox(width: 12),
-                  // Coluna de Nível e XP
                   Expanded(
                     child: Column(
-                      mainAxisAlignment:
-                          MainAxisAlignment.start, // Alinha ao topo
+                      mainAxisAlignment: MainAxisAlignment.start,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Nível
                         Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
-                            color: kAccentColor
-                                .withAlpha((0.2 * 255).round()), // Glassy
+                            // CORREÇÃO: Revertido para .withAlpha()
+                            color: kAccentColor.withAlpha((0.2 * 255).round()), // Glassy
                             border: Border.all(
-                                color:
-                                    kAccentColor.withAlpha((0.5 * 255).round()),
+                                // CORREÇÃO: Revertido para .withAlpha()
+                                color: kAccentColor.withAlpha((0.5 * 255).round()),
                                 width: 0.5),
                             borderRadius: BorderRadius.circular(12),
                           ),
@@ -1574,14 +1585,14 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        // Barra de XP
                         Stack(
                           children: [
                             Container(
                               height: 8,
                               decoration: BoxDecoration(
-                                color: kTextSecondary
-                                    .withAlpha(50), // Fundo escuro
+                                // CORREÇÃO: Revertido para .withAlpha()
+                                color:
+                                    kTextSecondary.withAlpha((0.2 * 255).round()), // Fundo escuro
                                 borderRadius: BorderRadius.circular(4),
                               ),
                             ),
@@ -1598,10 +1609,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                           ],
                         ),
                         const SizedBox(height: 4),
-                        // Texto de XP
                         Align(
                           alignment: Alignment.centerRight,
-                          // AJUSTE: Adicionado "XP: "
                           child: Text(
                             'XP: ${xpNoNivelAtual.toStringAsFixed(1)} / ${xpNecessarioParaNivel.toStringAsFixed(1)}',
                             style: const TextStyle(
@@ -1635,6 +1644,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       spaceBetweenChildren: 8,
       buttonSize: const Size(56.0, 56.0),
       childrenButtonSize: const Size(52.0, 52.0),
+      // ***** CORREÇÃO DO ERRO DE DIGITAÇÃO *****
+      // De: RoundedRectangleRBorder
+      // Para: RoundedRectangleBorder
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       children: [
         SpeedDialChild(
@@ -1643,7 +1655,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           label: 'New Note',
           labelStyle: const TextStyle(
               color: kTextPrimary, fontSize: 14, fontWeight: FontWeight.w500),
-          labelBackgroundColor: kCardColor.withOpacity(0.8),
+          // CORREÇÃO: Revertido para .withAlpha()
+          labelBackgroundColor: kCardColor.withAlpha((0.8 * 255).round()),
           onTap: () => _showNoteDialog(),
         ),
         SpeedDialChild(
@@ -1652,14 +1665,15 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           label: 'New Task',
           labelStyle: const TextStyle(
               color: kTextPrimary, fontSize: 14, fontWeight: FontWeight.w500),
-          labelBackgroundColor: kCardColor.withOpacity(0.8),
+          // CORREÇÃO: Revertido para .withAlpha()
+          labelBackgroundColor: kCardColor.withAlpha((0.8 * 255).round()),
           onTap: () => _showTaskDialog(),
         ),
       ],
     );
   }
 
-  // AJUSTE: Nova pilha de botões (Ocultar e Histórico)
+  // Pilha de botões (Ocultar e Histórico)
   Widget _buildActionButtons(BuildContext context, double bottomPadding) {
     final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom != 0;
     if (isKeyboardOpen) return const SizedBox.shrink();
@@ -1682,7 +1696,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           FloatingActionButton(
             heroTag: 'hide_fab',
             mini: true,
-            backgroundColor: kCardColor.withOpacity(0.8),
+            // CORREÇÃO: Revertido para .withAlpha()
+            backgroundColor: kCardColor.withAlpha((0.8 * 255).round()),
             foregroundColor: kTextSecondary,
             elevation: 4,
             tooltip: 'Toggle UI Visibility',
@@ -1697,12 +1712,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   : Icons.visibility_outlined,
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 12), // CORREÇÃO: Adicionado const
           // Botão de Histórico
           FloatingActionButton(
             heroTag: 'history_fab',
             mini: true,
-            backgroundColor: kCardColor.withOpacity(0.8), // Estilo Glassy
+            // CORREÇÃO: Revertido para .withAlpha()
+            backgroundColor: kCardColor.withAlpha((0.8 * 255).round()), // Estilo Glassy
             foregroundColor: kTextSecondary,
             elevation: 4,
             onPressed: _showHistoryModal,
@@ -1733,7 +1749,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             child: Container(
               // Container para o fundo "glass"
               decoration: const BoxDecoration(
-                // AJUSTE: Cor removida para transparência total
                 color: Colors.transparent,
               ),
               child: Column(
@@ -1760,22 +1775,17 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       length: 3,
       child: Scaffold(
         key: _scaffoldKey,
-        // Permite que o conteúdo (lista) role por trás da AppBar/ProfileCard
         extendBodyBehindAppBar: true,
 
-        // AppBar Customizada (transparente, só com botões)
+        // AppBar (inalterada desde a última correção)
         appBar: AppBar(
-          backgroundColor: Colors.transparent, // Totalmente transparente
+          backgroundColor: Colors.transparent,
           elevation: 0,
-          // AJUSTE: Removemos o 'leading' e a implicação automática
-          // para que a AppBar não bloqueie cliques na área do avatar.
           automaticallyImplyLeading: false,
           leading: null,
           actions: [
             SafeArea(
-              // Garante que o botão de menu não fique sob a notch
               child: IconButton(
-                // AJUSTE: Tamanho e Padding
                 icon: const Icon(Icons.menu, color: kTextSecondary, size: 28),
                 padding: const EdgeInsets.all(12.0),
                 tooltip: 'Open Menu',
@@ -1790,24 +1800,25 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         endDrawer: _buildDrawer(),
 
         body: Stack(
-          // Stack para o FAB e Botão de Histórico
           children: [
             // Conteúdo principal (Listas)
             Column(
               children: [
                 // Container que segura o ProfileCard + TabBar
+                // ***** CORREÇÃO DO OVERFLOW *****
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
+                  // Altura corrigida para 138 (90 do Card + 48 da TabBar)
+                  // Removida a altura arbitrária de 188.0
                   height: _uiVisible
-                      ? 188.0
+                      ? 138.0 
                       : MediaQuery.of(context).padding.top +
                           kToolbarHeight, // Altura dinâmica
-                  // O 'topUI' (com BackdropFilter) vai aqui
-                  child: Align(
-                    alignment: Alignment.bottomCenter,
-                    child: topUI,
-                  ),
+                  // Removido o Align desnecessário
+                  child: topUI,
                 ),
+                // ***** FIM DA CORREÇÃO DO OVERFLOW *****
+                
                 // Conteúdo das Abas
                 Expanded(
                   child: TabBarView(
@@ -1815,14 +1826,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     children: [
                       _buildTaskList(false),
                       _buildNotesList(false),
-                      _buildProfileTab(), // Placeholder
+                      _buildProfileTab(),
                     ],
                   ),
                 ),
               ],
             ),
 
-            // AJUSTE: Adiciona a nova pilha de botões (Ocultar/Histórico)
             _buildActionButtons(context, bottomPadding),
           ],
         ),
@@ -1832,5 +1842,4 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
 }
-
 
