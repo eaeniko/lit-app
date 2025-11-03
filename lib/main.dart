@@ -2,31 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:lit/models.dart'; // Importa os modelos
-import 'package:lit/pages/home_page.dart'; // Importa a nova HomePage
-import 'package:lit/services/notification_service.dart'; // Importa o serviço de notificação
-import 'dart:convert'; // Para o jsonDecode
+import 'package:lit/models.dart'; 
+import 'package:lit/pages/home_page.dart'; 
+// import 'package:lit/services/notification_service.dart'; // <-- REMOVA ESTA LINHA
+import 'dart:convert'; 
 
-// --- Constantes de Tema (Estilo Liquid Glass) ---
-const Color kBackgroundColor =
-    Color(0xFF000814); // Azul muito escuro para fundo
-const Color kCardColor =
-    Color(0xFF1A1F29); // Azul acinzentado escuro para cards
-const Color kAccentColor = Color(0xFF4CC2FF); // Azul claro vibrante
-const Color kTextPrimary = Color(0xFFFFFFFF); // Branco puro para contraste
-const Color kTextSecondary = Color(0xFFADB7BE); // Cinza azulado suave
-const Color kRedColor = Color(0xFFFF3B30); // Vermelho iOS
-const Color kYellowColor = Color(0xFFFFD60A); // Amarelo vibrante
-
-
-// --- ADAPTER FALSO PARA MIGRAÇÃO (CORRIGIDO) ---
+// --- ADAPTER FALSO PARA MIGRAÇÃO ---
 class LegacyMapAdapter extends TypeAdapter<Map> {
-  final int _typeId; // Variável interna para guardar o ID
-
-  LegacyMapAdapter(this._typeId); // Construtor
+  // ... (código do adapter falso)
+  final int _typeId; 
+  LegacyMapAdapter(this._typeId); 
 
   @override
-  int get typeId => _typeId; // <-- CORREÇÃO AQUI (getter)
+  int get typeId => _typeId; 
 
   @override
   Map read(BinaryReader reader) {
@@ -39,14 +27,12 @@ class LegacyMapAdapter extends TypeAdapter<Map> {
 
   @override
   void write(BinaryWriter writer, Map obj) {
-    // Não vamos escrever dados antigos, então este método pode ficar vazio.
     throw UnimplementedError("Este adapter é apenas para leitura de migração.");
   }
 }
 // --- FIM DOS ADAPTERS FALSOS ---
 
-
-// --- Função Auxiliar de Migração ---
+// ... (Função _convertOldFrequency)
 RepeatFrequency _convertOldFrequency(dynamic oldFreq) {
   if (oldFreq is String) {
     switch (oldFreq) {
@@ -63,7 +49,7 @@ RepeatFrequency _convertOldFrequency(dynamic oldFreq) {
   return RepeatFrequency.none;
 }
 
-// --- Função Auxiliar para Registrar Adapters NOVOS ---
+// ... (Função _registerNewAdapters)
 void _registerNewAdapters() {
   if (!Hive.isAdapterRegistered(10)) {
     Hive.registerAdapter(TaskAdapter()); // typeId: 10
@@ -82,67 +68,56 @@ void _registerNewAdapters() {
 // --- Inicialização ---
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await NotificationService.init();
+  
+  // REMOVA O "await NotificationService.init();" DAQUI
+
   final appDocumentDir = await getApplicationDocumentsDirectory();
   await Hive.initFlutter(appDocumentDir.path);
 
   // --- LÓGICA DE MIGRAÇÃO (v4 -> v5) ---
-  
-  // Define os nomes das caixas
+  // (Todo o seu código de migração que já funcionou)
   const String oldTasksBoxName = 'tasks_v4';
   const String oldNotesBoxName = 'notes_v4';
   const String oldProfileBoxName = 'user_profile_v4';
   const String oldProfileKey = 'main_profile_v4';
-  
-  // Nomes das caixas NOVAS (v5)
-  // (tasksBoxName, notesBoxName, profileBoxName, profileKey)
 
   final bool oldTasksExist = await Hive.boxExists(oldTasksBoxName);
   final bool newTasksExist = await Hive.boxExists(tasksBoxName); // v5
 
   if (oldTasksExist && !newTasksExist) {
-    // ignore: avoid_print
+    // ... (todo o seu código de migração que funcionou)
     print("--- INICIANDO MIGRAÇÃO DE DADOS v4 -> v5 ---");
 
-    // 1. REGISTRA OS ADAPTERS para LER os dados antigos
-    Hive.registerAdapter(LegacyMapAdapter(0)); // Para Tasks antigas com typeId 0
-    Hive.registerAdapter(LegacyMapAdapter(32)); // Para Tasks antigas com typeId 32
+    Hive.registerAdapter(LegacyMapAdapter(0)); 
+    Hive.registerAdapter(LegacyMapAdapter(32)); 
     Hive.registerAdapter(NoteAdapter());
     Hive.registerAdapter(UserProfileAdapter());
 
-    // 2. ABRE AS CAIXAS ANTIGAS
-    // ignore: avoid_print
     print("Lendo dados antigos...");
     final oldTasks = await Hive.openBox<dynamic>(oldTasksBoxName); 
     final oldNotes = await Hive.openBox<Note>(oldNotesBoxName); 
     final oldProfile = await Hive.openBox<UserProfile>(oldProfileBoxName); 
 
-    // 3. REGISTRA OS ADAPTERS NOVOS que faltam
-    // ignore: avoid_print
     print("Registrando adapters novos para escrever dados...");
     Hive.registerAdapter(TaskAdapter()); // typeId: 10 (Novo)
     Hive.registerAdapter(RepeatFrequencyAdapter()); // typeId: 3 (Novo)
 
-    // 4. ABRE AS CAIXAS NOVAS
     final newTasks = await Hive.openBox<Task>(tasksBoxName); // v5
     final newNotes = await Hive.openBox<Note>(notesBoxName); // v5
     final newProfile = await Hive.openBox<UserProfile>(profileBoxName); // v5
 
-    // --- 5. Migrar Tarefas (Tasks) ---
-    // ignore: avoid_print
     print("Migrando Tarefas...");
     for (var oldData in oldTasks.values) {
       if (oldData is Map) {
+        // ... (lógica de conversão do Map)
         List<String>? subtasksList;
         if (oldData[5] != null && (oldData[5] as String).isNotEmpty) {
           try { subtasksList = List<String>.from(jsonDecode(oldData[5] as String)); } catch(e) { /* ignora */ }
         }
-
         List<bool>? subtaskCompletionList;
          if (oldData[6] != null && (oldData[6] as String).isNotEmpty) {
           try { subtaskCompletionList = List<bool>.from(jsonDecode(oldData[6] as String)); } catch(e) { /* ignora */ }
         }
-
         final newTask = Task(
           id: oldData[0] as String,
           text: oldData[1] as String,
@@ -158,14 +133,10 @@ Future<void> main() async {
         await newTasks.put(newTask.id, newTask);
       }
     }
-    // ignore: avoid_print
     print("Tarefas migradas: ${newTasks.length}");
 
-    // --- 6. Migrar Notas (Notes) ---
-    // ignore: avoid_print
     print("Migrando Notas...");
     for (var note in oldNotes.values) {
-        // --- CORREÇÃO AQUI: Cria uma NOVA instância ---
         final newNote = Note(
           id: note.id,
           text: note.text,
@@ -173,52 +144,40 @@ Future<void> main() async {
           createdAt: note.createdAt,
           archivedAt: note.archivedAt,
         );
-        await newNotes.put(newNote.id, newNote); // Salva a CÓPIA
+        await newNotes.put(newNote.id, newNote); 
     }
-    // ignore: avoid_print
     print("Notas migradas: ${newNotes.length}");
 
-    // --- 7. Migrar Perfil (Profile) ---
-    // ignore: avoid_print
     print("Migrando Perfil...");
     final profile = oldProfile.get(oldProfileKey);
     if (profile != null) {
-        // --- CORREÇÃO AQUI: Cria uma NOVA instância ---
         final newProf = UserProfile(
           totalXP: profile.totalXP,
           level: profile.level,
           playerName: profile.playerName,
           avatarImagePath: profile.avatarImagePath,
         );
-        await newProfile.put(profileKey, newProf); // Salva a CÓPIA
-        // ignore: avoid_print
+        await newProfile.put(profileKey, newProf); 
         print("Perfil migrado.");
     }
-
-    // --- 8. Limpeza ---
-    // ignore: avoid_print
+    
     print("Limpando caixas antigas...");
     await oldTasks.close();
     await oldNotes.close();
     await oldProfile.close();
-    
     await Hive.deleteBoxFromDisk(oldTasksBoxName);
     await Hive.deleteBoxFromDisk(oldNotesBoxName);
     await Hive.deleteBoxFromDisk(oldProfileBoxName);
-    
-    // ignore: avoid_print
     print("--- MIGRAÇÃO CONCLUÍDA ---");
 
-    // Fecha as caixas novas, elas serão reabertas abaixo
     await newTasks.close();
     await newNotes.close();
     await newProfile.close();
     
   } else {
-    // Caminho normal (app já migrado ou instalação limpa)
-    // Apenas registra os adapters NOVOS
     _registerNewAdapters();
   }
+  // --- FIM DA MIGRAÇÃO ---
 
   // Abre as caixas (v5) para o app usar
   await Hive.openBox<Task>(tasksBoxName);
@@ -234,15 +193,27 @@ Future<void> main() async {
   runApp(const MyApp());
 }
 
+// ... (Resto do main.dart - const Colors, class MyApp, etc. permanece igual)
+// --- Constantes de Tema (Estilo Liquid Glass) ---
+const Color kBackgroundColor =
+    Color(0xFF000814); 
+const Color kCardColor =
+    Color(0xFF1A1F29); 
+const Color kAccentColor = Color(0xFF4CC2FF); 
+const Color kTextPrimary = Color(0xFFFFFFFF); 
+const Color kTextSecondary = Color(0xFFADB7BE); 
+const Color kRedColor = Color(0xFFFF3B30); 
+const Color kYellowColor = Color(0xFFFFD60A); 
+
 // --- App Widget (Apenas Tema) ---
 class MyApp extends StatelessWidget {
+// ... (Todo o seu código de 'MyApp' permanece o mesmo)
   const MyApp({super.key});
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'LIT V0.5.0',
       theme: ThemeData(
-        // (Seu tema permanece aqui)
          brightness: Brightness.dark,
         useMaterial3: true,
         primarySwatch: Colors.blue,

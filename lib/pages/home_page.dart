@@ -23,7 +23,7 @@ import 'package:lit/widgets/task_list_item.dart';
 import 'package:lit/services/data_service.dart';
 // Importa o serviço de backup
 import 'package:lit/services/backup_service.dart';
-
+import 'package:lit/services/notification_service.dart'; // <-- IMPORTAÇÃO NECESSÁRIA
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -66,13 +66,26 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       }
     });
 
-    // Inicia o check-in diário (que agora TAMBÉM checa as permissões)
-    _performDailyCheck();
+    // Inicia todos os serviços (incluindo permissões)
+    _initializeServices();
   }
 
-  // --- FUNÇÃO UNIFICADA (CORRIGIDA) ---
-  Future<void> _performDailyCheck() async {
-    // 1. Pega o 'prefs' UMA VEZ
+  // --- (NOVO) Função unificada de inicialização ---
+  Future<void> _initializeServices() async {
+    // 1. Inicializa o serviço de notificação
+    await NotificationService.init();
+
+    // 2. Pede as permissões de Notificação e Alarme Exato
+    await NotificationService.requestSystemPermissions();
+
+    // 3. Roda o check-in diário e a verificação de permissões de bateria
+    await _performDailyCheckAndPermissionPopups();
+  }
+
+
+  // --- (MODIFICADO) Função de Check-in e Pop-ups ---
+  Future<void> _performDailyCheckAndPermissionPopups() async {
+    // 1. Pega o 'prefs'
     final prefs = await SharedPreferences.getInstance();
 
     // 2. Lógica do Check-in Diário
@@ -85,11 +98,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       await prefs.setString(lastCheckKey, today); // Salva o check
     }
 
-    // 3. Lógica da Verificação de Permissão (unificada)
+    // 3. Lógica da Verificação de Permissão GENÉRICA (Android 12+)
     const String permWarningKey = 'has_seen_alarm_battery_warning_v1';
     if (!(prefs.getBool(permWarningKey) ?? false)) {
       
-      // Só roda em Android
       if (Platform.isAndroid) {
         try {
           final deviceInfo = await DeviceInfoPlugin().androidInfo;
@@ -149,15 +161,14 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           // Ignora erros
         }
       } else {
-        // Se não for Android, não precisa do aviso
          prefs.setBool(permWarningKey, true);
       }
     }
 
-
-    // 4. Finaliza o Loading da UI (só depois que tudo rodar)
+    // 4. (REMOVIDO) Lógica da Xiaomi
+    
+    // 5. Finaliza o Loading da UI
     if (needsDailyCheck) {
-      // Adiciona um pequeno delay para a UI (como solicitado)
       await Future.delayed(const Duration(milliseconds: 500));
     }
     
