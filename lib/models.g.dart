@@ -8,7 +8,7 @@ part of 'models.dart';
 
 class TaskAdapter extends TypeAdapter<Task> {
   @override
-  final int typeId = 0;
+  final int typeId = 10;
 
   @override
   Task read(BinaryReader reader) {
@@ -22,6 +22,11 @@ class TaskAdapter extends TypeAdapter<Task> {
       isCompleted: fields[2] as bool,
       createdAt: fields[3] as DateTime,
       completedAt: fields[4] as DateTime?,
+      repeatFrequency: fields[7] == null
+          ? RepeatFrequency.none
+          : fields[7] as RepeatFrequency,
+      nextDueDate: fields[8] as DateTime?,
+      reminderDateTime: fields[9] as DateTime?,
     )
       ..subtasksJson = fields[5] as String?
       ..subtaskCompletionJson = fields[6] as String?;
@@ -30,7 +35,7 @@ class TaskAdapter extends TypeAdapter<Task> {
   @override
   void write(BinaryWriter writer, Task obj) {
     writer
-      ..writeByte(7)
+      ..writeByte(10)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -44,7 +49,13 @@ class TaskAdapter extends TypeAdapter<Task> {
       ..writeByte(5)
       ..write(obj.subtasksJson)
       ..writeByte(6)
-      ..write(obj.subtaskCompletionJson);
+      ..write(obj.subtaskCompletionJson)
+      ..writeByte(7)
+      ..write(obj.repeatFrequency)
+      ..writeByte(8)
+      ..write(obj.nextDueDate)
+      ..writeByte(9)
+      ..write(obj.reminderDateTime);
   }
 
   @override
@@ -143,6 +154,55 @@ class UserProfileAdapter extends TypeAdapter<UserProfile> {
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is UserProfileAdapter &&
+          runtimeType == other.runtimeType &&
+          typeId == other.typeId;
+}
+
+class RepeatFrequencyAdapter extends TypeAdapter<RepeatFrequency> {
+  @override
+  final int typeId = 3;
+
+  @override
+  RepeatFrequency read(BinaryReader reader) {
+    switch (reader.readByte()) {
+      case 0:
+        return RepeatFrequency.none;
+      case 1:
+        return RepeatFrequency.daily;
+      case 2:
+        return RepeatFrequency.weekly;
+      case 3:
+        return RepeatFrequency.monthly;
+      default:
+        return RepeatFrequency.none;
+    }
+  }
+
+  @override
+  void write(BinaryWriter writer, RepeatFrequency obj) {
+    switch (obj) {
+      case RepeatFrequency.none:
+        writer.writeByte(0);
+        break;
+      case RepeatFrequency.daily:
+        writer.writeByte(1);
+        break;
+      case RepeatFrequency.weekly:
+        writer.writeByte(2);
+        break;
+      case RepeatFrequency.monthly:
+        writer.writeByte(3);
+        break;
+    }
+  }
+
+  @override
+  int get hashCode => typeId.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is RepeatFrequencyAdapter &&
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }

@@ -1,31 +1,28 @@
 import 'dart:math'; // Necessário para 'pow'
 import 'package:hive/hive.dart';
 import 'package:lit/models.dart';
-// REMOVIDO: Não precisamos mais importar o balancing_service
-// import 'package:lit/services/balancing_service.dart';
 
 /// Classe de serviço estática para lidar com TODA a lógica de XP:
-/// - Cálculo de Níveis (antes era 'BalancingService')
-/// - Aplicação de Ganhos/Perdas (lógica de 'XpService')
+/// - Cálculo de Níveis
+/// - Aplicação de Ganhos/Perdas
 class XpService {
   // --- Acesso rápido às Caixas (Boxes) ---
   static Box<UserProfile> get _profileBox =>
       Hive.box<UserProfile>(profileBoxName);
 
-  // --- Constantes de Nível (Vindo do BalancingService) ---
+  // --- Constantes de Nível ---
   static const double _levelBase = 10.0;
   static const double _levelExponent = 3.0; // Expoente para dificultar
 
-  // --- Constantes Base de XP (Vindo do BalancingService) ---
+  // --- Constantes Base de XP ---
   static const double xpPerTask = 0.5;
   static const double xpPerSubtask = 0.1;
   static const double xpPerNote = 0.05;
 
-  // --- Multiplicador de XP (Vindo do BalancingService) ---
+  // --- Multiplicador de XP ---
   static const double _xpLevelMultiplier = 0.001; // 0.1% por nível
 
-  // --- Métodos de Cálculo de Nível (Vindo do BalancingService) ---
-  // (Estes são PÚBLICOS pois a UI usa para a barra de XP)
+  // --- Métodos de Cálculo de Nível (PÚBLICOS) ---
 
   /// Calcula o XP total necessário para ATINGIR um determinado nível.
   static double xpForLevel(int level) {
@@ -45,8 +42,7 @@ class XpService {
     return level;
   }
 
-  // --- Métodos de Ganho de XP Dinâmico (Vindo do BalancingService) ---
-  // (Estes são PÚBLICOS pois os métodos de lógica abaixo usam)
+  // --- Métodos de Ganho de XP Dinâmico (PÚBLICOS) ---
 
   /// Calcula o XP a ser ganho por uma Tarefa, com base no nível atual.
   static double getXpForTask(int currentLevel) {
@@ -63,11 +59,9 @@ class XpService {
     return xpPerNote * (1 + (currentLevel * _xpLevelMultiplier));
   }
 
-  // --- Método Principal de Atualização (Vindo do BalancingService) ---
-  // (Renomeado para _modifyXP e tornado privado)
+  // --- Método Principal de Atualização (Privado) ---
 
   /// Adiciona ou remove uma quantidade de XP ao perfil e recalcula o nível.
-  /// Este é o único método que deve salvar o perfil.
   static void _modifyXP(double amount) {
     final profile = _profileBox.get(profileKey);
     if (profile == null) return;
@@ -83,7 +77,7 @@ class XpService {
     profile.save();
   }
 
-  // --- NOVOS Métodos de Lógica (do XpService anterior) ---
+  // --- Métodos de Lógica de Ganho/Perda ---
 
   /// Chamado quando uma Tarefa principal é marcada como CONCLUÍDA.
   static void onTaskCompleted(Task task) {
@@ -92,18 +86,17 @@ class XpService {
     double totalXpGained = 0.0;
 
     // 1. Adiciona XP da tarefa principal
-    totalXpGained += getXpForTask(currentLevel); // Usa o método local
+    totalXpGained += getXpForTask(currentLevel);
 
     // 2. Adiciona XP de CADA subtask que não estava completa
     final completions = task.subtaskCompletion;
     for (int i = 0; i < completions.length; i++) {
       if (completions[i] == false) {
-        // Se não estava completa, ganha XP por ela
-        totalXpGained += getXpForSubtask(currentLevel); // Usa o método local
+        totalXpGained += getXpForSubtask(currentLevel);
       }
     }
 
-    _modifyXP(totalXpGained); // Chama o método privado
+    _modifyXP(totalXpGained);
   }
 
   /// Chamado quando uma Tarefa principal é marcada como INCOMPLETA.
@@ -113,41 +106,41 @@ class XpService {
     double totalXpLost = 0.0;
 
     // 1. Remove XP da tarefa principal
-    totalXpLost -= getXpForTask(currentLevel); // Usa o método local
+    totalXpLost -= getXpForTask(currentLevel);
 
     // 2. Remove XP de TODAS as subtasks (assume que todas estavam completas)
     final subtaskCount = task.subtasks.length;
-    totalXpLost -= (getXpForSubtask(currentLevel) * subtaskCount); // Usa o método local
+    totalXpLost -= (getXpForSubtask(currentLevel) * subtaskCount);
 
-    _modifyXP(totalXpLost); // Chama o método privado
+    _modifyXP(totalXpLost);
   }
 
   /// Chamado quando uma Subtask é marcada como CONCLUÍDA.
   static void onSubtaskCompleted() {
     final profile = _profileBox.get(profileKey);
     int currentLevel = profile?.level ?? 1;
-    _modifyXP(getXpForSubtask(currentLevel)); // Usa o método local
+    _modifyXP(getXpForSubtask(currentLevel));
   }
 
   /// Chamado quando uma Subtask é marcada como INCOMPLETA.
   static void onSubtaskIncomplete() {
     final profile = _profileBox.get(profileKey);
     int currentLevel = profile?.level ?? 1;
-    _modifyXP(-getXpForSubtask(currentLevel)); // Usa o método local
+    _modifyXP(-getXpForSubtask(currentLevel));
   }
 
   /// Chamado quando uma Nota é ARQUIVADA.
   static void onNoteArchived() {
     final profile = _profileBox.get(profileKey);
     int currentLevel = profile?.level ?? 1;
-    _modifyXP(getXpForNote(currentLevel)); // Usa o método local
+    _modifyXP(getXpForNote(currentLevel));
   }
 
   /// Chamado quando uma Nota é DESARQUIVADA.
   static void onNoteUnarchived() {
     final profile = _profileBox.get(profileKey);
     int currentLevel = profile?.level ?? 1;
-    _modifyXP(-getXpForNote(currentLevel)); // Usa o método local
+    _modifyXP(-getXpForNote(currentLevel));
   }
 }
 

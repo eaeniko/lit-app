@@ -1,45 +1,44 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-// import 'dart:math'; // REMOVIDO: Importação não utilizada
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:flutter_speed_dial/flutter_speed_dial.dart';
 import 'dart:ui'; // Para o BackdropFilter (Liquid Glass)
 import 'package:image_picker/image_picker.dart';
-import 'dart:io';
+import 'dart:io'; // Necessário para Platform
+import 'package:shared_preferences/shared_preferences.dart'; // Para check-in diário
+import 'package:intl/intl.dart'; // Para formatar datas
+import 'dart:async'; // Para o delay do loading
+import 'package:device_info_plus/device_info_plus.dart'; // Para checar Android SDK
+import 'package:app_settings/app_settings.dart'; // Para abrir as configs
 
 // Importa os modelos
 import 'package:lit/models.dart';
 // Importa as constantes de cores
 import 'package:lit/main.dart';
-// Importa o NOVO serviço de XP unificado
+// Importa o serviço de XP
 import 'package:lit/services/xp_service.dart';
-// AJUSTE: Importa o novo widget de item da lista (caminho atualizado)
+// Importa o widget de item da lista
 import 'package:lit/widgets/task_list_item.dart';
-// NOVO IMPORT DO SERVIÇO DE DADOS
+// Importa o serviço de dados
 import 'package:lit/services/data_service.dart';
+// Importa o serviço de backup
+import 'package:lit/services/backup_service.dart';
 
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
   @override
   State<HomePage> createState() => _HomePageState();
+  
 }
 
 class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
-  String _historyType =
-      'Tarefas'; // Controla qual tipo de histórico está sendo exibido
-  
-  // ***** CORREÇÃO: REMOVIDA A BARRA DE PESQUISA DE TAREFAS *****
-  // final TextEditingController _searchTasksController = TextEditingController();
-  // String _tasksSearchTerm = '';
-  // ***** FIM DA CORREÇÃO *****
   
   final TextEditingController _searchNotesController = TextEditingController();
   String _notesSearchTerm = '';
   final TextEditingController _searchHistoryController =
       TextEditingController();
-  String _historySearchTerm = '';
-
+  
   late Box<Task> tasksBox;
   late Box<Note> notesBox;
   late Box<UserProfile> profileBox;
@@ -47,6 +46,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   late TabController _tabController;
   bool _uiVisible = true;
+
+  // Estado para o loading do check-in diário
+  bool _isLoadingDailyCheck = true;
 
   @override
   void initState() {
@@ -56,16 +58,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     profileBox = Hive.box<UserProfile>(profileBoxName);
     _tabController = TabController(length: 3, vsync: this);
 
-    // ***** CORREÇÃO: REMOVIDA A BARRA DE PESQUISA DE TAREFAS *****
-    // _searchTasksController.addListener(() {
-    //   if (mounted) {
-    //     setState(() {
-    //       _tasksSearchTerm = _searchTasksController.text.toLowerCase();
-    //     });
-    //   }
-    // });
-    // ***** FIM DA CORREÇÃO *****
-    
     _searchNotesController.addListener(() {
       if (mounted) {
         setState(() {
@@ -73,20 +65,112 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         });
       }
     });
-    _searchHistoryController.addListener(() {
-      if (mounted) {
-        setState(() {
-          _historySearchTerm = _searchHistoryController.text.toLowerCase();
-        });
-      }
-    });
+
+    // Inicia o check-in diário (que agora TAMBÉM checa as permissões)
+    _performDailyCheck();
   }
+
+  // --- FUNÇÃO UNIFICADA (CORRIGIDA) ---
+  Future<void> _performDailyCheck() async {
+    // 1. Pega o 'prefs' UMA VEZ
+    final prefs = await SharedPreferences.getInstance();
+
+    // 2. Lógica do Check-in Diário
+    final String today = DateTime.now().toIso8601String().split('T').first;
+    final String? lastCheck = prefs.getString(lastCheckKey);
+
+    bool needsDailyCheck = (lastCheck != today);
+    if (needsDailyCheck) {
+      await DataService.checkRepeatingTasks();
+      await prefs.setString(lastCheckKey, today); // Salva o check
+    }
+
+    // 3. Lógica da Verificação de Permissão (unificada)
+    const String permWarningKey = 'has_seen_alarm_battery_warning_v1';
+    if (!(prefs.getBool(permWarningKey) ?? false)) {
+      
+      // Só roda em Android
+      if (Platform.isAndroid) {
+        try {
+          final deviceInfo = await DeviceInfoPlugin().androidInfo;
+          final sdkInt = deviceInfo.version.sdkInt;
+
+          // Se for Android 12+ (SDK 31+), mostra o aviso
+          if (sdkInt >= 31) {
+            await Future.delayed(const Duration(seconds: 2)); // Espera
+            if (!mounted) return;
+
+            showDialog<void>(
+              context: context,
+              barrierDismissible: false, 
+              builder: (BuildContext context) => AlertDialog(
+                title: const Text('Permissions for Reminders'),
+                content: const SingleChildScrollView(
+                  child: ListBody(
+                    children: <Widget>[
+                      Text('To ensure your reminders *always* work, please check two critical settings:'),
+                      SizedBox(height: 16),
+                      Text('1. Alarms & Reminders', style: TextStyle(fontWeight: FontWeight.bold)),
+                      Text('   (Must be set to "Allowed")'),
+                      SizedBox(height: 10),
+                      Text('2. Battery Saver', style: TextStyle(fontWeight: FontWeight.bold)),
+                      Text('   (Must be set to "Unrestricted")'),
+                    ],
+                  ),
+                ),
+                actions: <Widget>[
+                  TextButton(
+                    child: const Text('Open Alarm Settings'),
+                    onPressed: () {
+                      AppSettings.openAppSettings(type: AppSettingsType.alarm); 
+                    },
+                  ),
+                  TextButton(
+                    child: const Text('Open Battery Settings'),
+                    onPressed: () {
+                      AppSettings.openAppSettings(type: AppSettingsType.batteryOptimization); 
+                    },
+                  ),
+                  TextButton(
+                    child: const Text('DONE', style: TextStyle(color: kAccentColor, fontWeight: FontWeight.bold)),
+                    onPressed: () {
+                      prefs.setBool(permWarningKey, true); // Não pergunta de novo
+                      Navigator.of(context).pop();
+                    },
+                  ),
+                ],
+              ),
+            );
+          } else {
+            // Se for Android 11 ou inferior, não precisa deste aviso
+            prefs.setBool(permWarningKey, true);
+          }
+        } catch (e) {
+          // Ignora erros
+        }
+      } else {
+        // Se não for Android, não precisa do aviso
+         prefs.setBool(permWarningKey, true);
+      }
+    }
+
+
+    // 4. Finaliza o Loading da UI (só depois que tudo rodar)
+    if (needsDailyCheck) {
+      // Adiciona um pequeno delay para a UI (como solicitado)
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+    
+    if (mounted) {
+      setState(() {
+        _isLoadingDailyCheck = false;
+      });
+    }
+  }
+
 
   @override
   void dispose() {
-    // ***** CORREÇÃO: REMOVIDA A BARRA DE PESQUISA DE TAREFAS *****
-    // _searchTasksController.dispose();
-    // ***** FIM DA CORREÇÃO *****
     _searchNotesController.dispose();
     _searchHistoryController.dispose();
     _tabController.dispose();
@@ -101,133 +185,166 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       context: context,
       barrierDismissible: true,
       builder: (BuildContext context) {
-        return HookBuilder(
-          builder: (context) {
-            final textState = useState(textController.text);
-            final isLoading = useState(task != null);
-            final subtasksState = useState<List<String>>([]);
-            final completionState = useState<List<bool>>([]);
-            
-            // ***** CORREÇÃO DO BUG 3 (FOCO) *****
-            final subControllersState =
-                useState<List<TextEditingController>>([]);
-            // 1. Adiciona um estado para os FocusNodes
-            final subFocusNodesState = useState<List<FocusNode>>([]);
-            // ***** FIM DA CORREÇÃO *****
-
-
-            useEffect(() {
-              Future<void> loadTaskData() async {
-                final loadedSubtasks = task?.subtasks ?? [];
-                final loadedCompletion = task?.subtaskCompletion ?? [];
-                
-                // ***** CORREÇÃO DO BUG 3 (FOCO) *****
-                // 2. Cria controllers E focus nodes ao carregar
-                final loadedControllers = loadedSubtasks
-                    .map((t) => TextEditingController(text: t))
-                    .toList();
-                final loadedFocusNodes = loadedSubtasks
-                    .map((_) => FocusNode())
-                    .toList();
-                // ***** FIM DA CORREÇÃO *****
-
-                subtasksState.value = loadedSubtasks;
-                completionState.value = loadedCompletion;
-                subControllersState.value = loadedControllers;
-                subFocusNodesState.value = loadedFocusNodes; // Salva os focus nodes
-                isLoading.value = false;
-              }
-
-              if (task != null) {
-                Future.delayed(const Duration(milliseconds: 50), loadTaskData);
-              }
+        return Dialog(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 48.0),
+          backgroundColor: Theme.of(context).dialogTheme.backgroundColor,
+          shape: Theme.of(context).dialogTheme.shape,
+          child: HookBuilder(
+            builder: (context) {
               
-              // 3. Faz o dispose dos controllers E focus nodes
-              return () {
-                for (final controller in subControllersState.value) {
-                  controller.dispose();
-                }
-                for (final focusNode in subFocusNodesState.value) {
-                  focusNode.dispose();
-                }
-              };
-            }, [task]);
+              // Hooks movidos para dentro do builder
+              final repeatState = useState<RepeatFrequency>(
+                  task?.repeatFrequency ?? RepeatFrequency.none);
+              final reminderState = useState<DateTime?>(task?.reminderDateTime);
 
-            useEffect(() {
-              listener() {
-                if (mounted) {
-                  textState.value = textController.text;
+              final textState = useState(textController.text);
+              final isLoading = useState(task != null);
+              final subtasksState = useState<List<String>>([]);
+              final completionState = useState<List<bool>>([]);
+              final subControllersState =
+                  useState<List<TextEditingController>>([]);
+              final subFocusNodesState = useState<List<FocusNode>>([]);
+
+              DateTime? pickReminderDateTime; 
+
+              useEffect(() {
+                Future<void> loadTaskData() async {
+                  final loadedSubtasks = task?.subtasks ?? [];
+                  final loadedCompletion = task?.subtaskCompletion ?? [];
+                  final loadedControllers = loadedSubtasks
+                      .map((t) => TextEditingController(text: t))
+                      .toList();
+                  final loadedFocusNodes =
+                      loadedSubtasks.map((_) => FocusNode()).toList();
+
+                  subtasksState.value = loadedSubtasks;
+                  completionState.value = loadedCompletion;
+                  subControllersState.value = loadedControllers;
+                  subFocusNodesState.value = loadedFocusNodes;
+                  isLoading.value = false;
+                }
+
+                if (task != null) {
+                  Future.delayed(const Duration(milliseconds: 50), loadTaskData);
+                }
+
+                return () {
+                  for (final controller in subControllersState.value) {
+                    controller.dispose();
+                  }
+                  for (final focusNode in subFocusNodesState.value) {
+                    focusNode.dispose();
+                  }
+                };
+              }, [task]);
+
+              useEffect(() {
+                listener() {
+                  if (mounted) {
+                    textState.value = textController.text;
+                  }
+                }
+
+                textController.addListener(listener);
+                return () => textController.removeListener(listener);
+              }, [textController]);
+
+              void addSubtaskField() {
+                final newController = TextEditingController();
+                final newFocusNode = FocusNode();
+
+                subtasksState.value = [...subtasksState.value, ''];
+                completionState.value = [...completionState.value, false];
+                subControllersState.value = [
+                  ...subControllersState.value,
+                  newController
+                ];
+                subFocusNodesState.value = [
+                  ...subFocusNodesState.value,
+                  newFocusNode
+                ];
+
+                Future.delayed(const Duration(milliseconds: 100), () {
+                  newFocusNode.requestFocus();
+                });
+              }
+
+              void removeSubtaskField(int index) {
+                if (index >= 0 && index < subtasksState.value.length) {
+                  final newSubtasks = List<String>.from(subtasksState.value)
+                    ..removeAt(index);
+                  final newCompletion = List<bool>.from(completionState.value)
+                    ..removeAt(index);
+
+                  final controllers = subControllersState.value;
+                  if (index < controllers.length) {
+                    controllers[index].dispose();
+                  }
+                  final newControllers =
+                      List<TextEditingController>.from(controllers)
+                        ..removeAt(index);
+
+                  final focusNodes = subFocusNodesState.value;
+                  if (index < focusNodes.length) {
+                    focusNodes[index].dispose();
+                  }
+                  final newFocusNodes = List<FocusNode>.from(focusNodes)
+                    ..removeAt(index);
+
+                  subtasksState.value = newSubtasks;
+                  completionState.value = newCompletion;
+                  subControllersState.value = newControllers;
+                  subFocusNodesState.value = newFocusNodes;
                 }
               }
-              textController.addListener(listener);
-              return () => textController.removeListener(listener);
-            }, [textController]);
 
-            // ***** CORREÇÃO DO BUG 3 (FOCO) *****
-            // 4. Atualiza a função de adicionar
-            void addSubtaskField() {
-              final newController = TextEditingController();
-              final newFocusNode = FocusNode();
-
-              subtasksState.value = [...subtasksState.value, ''];
-              completionState.value = [...completionState.value, false];
-              subControllersState.value = [...subControllersState.value, newController];
-              subFocusNodesState.value = [...subFocusNodesState.value, newFocusNode];
-
-              // 5. Solicita o foco no novo campo (com atraso)
-              Future.delayed(const Duration(milliseconds: 100), () {
-                 newFocusNode.requestFocus();
-              });
-            }
-
-            // 6. Atualiza a função de remover
-            void removeSubtaskField(int index) {
-              if (index >= 0 && index < subtasksState.value.length) {
-                final newSubtasks = List<String>.from(subtasksState.value)
-                  ..removeAt(index);
-                final newCompletion = List<bool>.from(completionState.value)
-                  ..removeAt(index);
-
-                // Remove e faz dispose do controller
-                final controllers = subControllersState.value;
-                if (index < controllers.length) {
-                  controllers[index].dispose();
-                }
-                final newControllers =
-                    List<TextEditingController>.from(controllers)
-                      ..removeAt(index);
+              Future<void> selectReminderDateTime(BuildContext context) async {
+                final DateTime? pickedDate = await showDatePicker(
+                  context: context,
+                  initialDate: reminderState.value ?? DateTime.now().add(const Duration(hours: 1)),
+                  firstDate: DateTime.now(),
+                  lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
+                );
                 
-                // Remove e faz dispose do focus node
-                final focusNodes = subFocusNodesState.value;
-                 if (index < focusNodes.length) {
-                  focusNodes[index].dispose();
+                if (pickedDate != null && context.mounted) {
+                  final TimeOfDay? pickedTime = await showTimePicker(
+                    context: context,
+                    initialTime: TimeOfDay.fromDateTime(
+                        reminderState.value ?? DateTime.now().add(const Duration(hours: 1))),
+                  );
+
+                  if (pickedTime != null && context.mounted) {
+                    pickReminderDateTime = DateTime( 
+                      pickedDate.year,
+                      pickedDate.month,
+                      pickedDate.day,
+                      pickedTime.hour,
+                      pickedTime.minute,
+                    );
+                    if (pickReminderDateTime!.isBefore(DateTime.now())) {
+                       pickReminderDateTime = DateTime.now().add(const Duration(minutes: 5));
+                       
+                       if (!context.mounted) return;
+                       ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: const Text('Reminder set to 5 minutes from now as selected time was in the past.'),
+                            backgroundColor: kYellowColor.withAlpha((0.8 * 255).round()),
+                          ),
+                        );
+                    }
+                    reminderState.value = pickReminderDateTime;
+                  }
                 }
-                final newFocusNodes =
-                    List<FocusNode>.from(focusNodes)
-                      ..removeAt(index);
-
-                subtasksState.value = newSubtasks;
-                completionState.value = newCompletion;
-                subControllersState.value = newControllers;
-                subFocusNodesState.value = newFocusNodes; // Salva a nova lista
               }
-            }
-            // ***** FIM DA CORREÇÃO *****
 
-
-            return AlertDialog(
-              backgroundColor: Theme.of(context).dialogTheme.backgroundColor,
-              title: Text(task == null ? 'New Task' : 'Edit Task',
-                  style:
-                      TextStyle(color: kAccentColor.withAlpha((0.8 * 255).round()))),
-              contentPadding: const EdgeInsets.fromLTRB(24.0, 20.0, 24.0, 0.0),
-              content: isLoading.value
+              Widget dialogContent = isLoading.value
                   ? const Center(
                       child: Padding(
                       padding: EdgeInsets.all(32.0),
                       child: CircularProgressIndicator(),
                     ))
                   : SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(24.0, 20.0, 24.0, 0.0),
                       child: ListBody(
                         children: <Widget>[
                           TextField(
@@ -269,62 +386,64 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                             ),
                           Column(
                             mainAxisSize: MainAxisSize.min,
-                            children: [
-                              ...subtasksState.value.asMap().entries.map((entry) {
-                                final index = entry.key;
-                                final controller = subControllersState.value[index];
-                                // ***** CORREÇÃO DO BUG 3 (FOCO) *****
-                                // 7. Pega o focus node correspondente
-                                final focusNode = subFocusNodesState.value[index];
-                                // ***** FIM DA CORREÇÃO *****
+                            children: subtasksState.value
+                                .asMap()
+                                .entries
+                                .map((entry) {
+                              final index = entry.key;
+                              final controller =
+                                  subControllersState.value[index];
+                              final focusNode =
+                                  subFocusNodesState.value[index];
 
-                                return Padding(
-                                  padding: const EdgeInsets.only(bottom: 8.0),
-                                  child: Row(
-                                    crossAxisAlignment: CrossAxisAlignment.center,
-                                    children: [
-                                      Expanded(
-                                        child: TextField(
-                                          // 8. Passa o controller e o focus node
-                                          controller: controller,
-                                          focusNode: focusNode,
-                                          style: const TextStyle(
-                                              color: kTextPrimary, fontSize: 14),
-                                          decoration: InputDecoration(
-                                            hintText: 'Subtask ${index + 1}',
-                                            isDense: true,
-                                            contentPadding:
-                                                const EdgeInsets.symmetric(
-                                                    horizontal: 10,
-                                                    vertical: 10),
-                                          ),
-                                          onChanged: (value) {
-                                            final currentList =
-                                                subtasksState.value;
-                                            if (index >= 0 &&
-                                                index < currentList.length) {
-                                              currentList[index] = value;
-                                            }
-                                          },
-                                          textCapitalization:
-                                              TextCapitalization.sentences,
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 8.0),
+                                child: Row(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.center,
+                                  children: [
+                                    Expanded(
+                                      child: TextField(
+                                        controller: controller,
+                                        focusNode: focusNode,
+                                        style: const TextStyle(
+                                            color: kTextPrimary,
+                                            fontSize: 14),
+                                        decoration: InputDecoration(
+                                          hintText: 'Subtask ${index + 1}',
+                                          isDense: true,
+                                          contentPadding:
+                                              const EdgeInsets.symmetric(
+                                                  horizontal: 10,
+                                                  vertical: 10),
                                         ),
+                                        onChanged: (value) {
+                                          final currentList =
+                                              subtasksState.value;
+                                          if (index >= 0 &&
+                                              index < currentList.length) {
+                                            currentList[index] = value;
+                                          }
+                                        },
+                                        textCapitalization:
+                                            TextCapitalization.sentences,
                                       ),
-                                      IconButton(
-                                        icon: const Icon(
-                                            Icons.remove_circle_outline,
-                                            color: kRedColor,
-                                            size: 20),
-                                        padding: const EdgeInsets.only(left: 8),
-                                        constraints: const BoxConstraints(),
-                                        onPressed: () => removeSubtaskField(index),
-                                        tooltip: 'Remove Subtask',
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              }).toList(),
-                            ],
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(
+                                          Icons.remove_circle_outline,
+                                          color: kRedColor,
+                                          size: 20),
+                                      padding: const EdgeInsets.only(left: 8),
+                                      constraints: const BoxConstraints(),
+                                      onPressed: () =>
+                                          removeSubtaskField(index),
+                                      tooltip: 'Remove Subtask',
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }).toList(), 
                           ),
                           Container(
                             alignment: Alignment.centerLeft,
@@ -341,61 +460,171 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                               onPressed: addSubtaskField,
                             ),
                           ),
+                          const SizedBox(height: 20),
+                          const Text('Repeat:',
+                              style: TextStyle(
+                                  color: kTextSecondary,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14)),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8.0,
+                            runSpacing: 4.0,
+                            children: RepeatFrequency.values.map((frequency) {
+                              return ChoiceChip(
+                                label: Text(frequency.displayName),
+                                selected: repeatState.value == frequency,
+                                onSelected: (isSelected) {
+                                  if (isSelected) {
+                                    repeatState.value = frequency;
+                                  }
+                                },
+                              );
+                            }).toList(),
+                          ),
+                          const SizedBox(height: 20),
+                          const Text('Reminder:',
+                              style: TextStyle(
+                                  color: kTextSecondary,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14)),
+                          const SizedBox(height: 8),
+                          GestureDetector(
+                            onTap: () => selectReminderDateTime(context),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: kCardColor.withAlpha((0.3 * 255).round()),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                    color: kTextPrimary.withAlpha(15), width: 0.5),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    reminderState.value == null
+                                        ? 'Set reminder'
+                                        : DateFormat('EEE, MMM d, yyyy  h:mm a')
+                                            .format(reminderState.value!),
+                                    style: TextStyle(
+                                      color: reminderState.value == null
+                                          ? kTextSecondary.withAlpha(150)
+                                          : kTextPrimary,
+                                    ),
+                                  ),
+                                  if (reminderState.value != null)
+                                    IconButton(
+                                      icon: const Icon(Icons.clear, color: kTextSecondary, size: 20),
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                      tooltip: 'Clear reminder',
+                                      onPressed: () {
+                                        reminderState.value = null;
+                                      },
+                                    )
+                                  else
+                                    const Icon(Icons.calendar_today, color: kTextSecondary, size: 18),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 24), // Espaço extra no final
                         ],
                       ),
+                    );
+
+              return Column(
+                mainAxisSize: MainAxisSize.min, // Faz a coluna se ajustar ao conteúdo
+                children: [
+                  // Título
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24.0, 24.0, 24.0, 0.0),
+                    child: Text(task == null ? 'New Task' : 'Edit Task',
+                        style: TextStyle(
+                            color: kAccentColor.withAlpha((0.8 * 255).round()),
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold
+                        )
                     ),
-              actionsPadding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 16.0),
-              actions: <Widget>[
-                TextButton(
-                  child: const Text('Cancel'),
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                  },
-                ),
-                TextButton(
-                  child: Text(task == null ? 'Add' : 'Save',
-                      style: const TextStyle(
-                          color: kAccentColor, fontWeight: FontWeight.bold)),
-                  onPressed: () {
-                    final text = textController.text.trim();
-                    if (text.isNotEmpty) {
-                      final finalSubtasks = subControllersState.value
-                          .map((c) => c.text.trim())
-                          .where((s) => s.isNotEmpty)
-                          .toList();
-                      final finalCompletion = completionState.value;
-                      List<bool> adjustedCompletion = [];
-                      int subtaskStateIndex = 0;
-                      for (final controller in subControllersState.value) {
-                        if (controller.text.trim().isNotEmpty) {
-                          adjustedCompletion.add(
-                              finalCompletion.length > subtaskStateIndex
-                                  ? finalCompletion[subtaskStateIndex]
-                                  : false);
-                        }
-                        subtaskStateIndex++;
-                      }
-                      if (task == null) {
-                        DataService.addTask(text, finalSubtasks);
-                      } else {
-                        DataService.updateTask(
-                            task, text, finalSubtasks, adjustedCompletion);
-                      }
-                      Navigator.of(context).pop();
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content:
-                              const Text('Task description cannot be empty.'),
-                          backgroundColor: kRedColor.withAlpha((0.8 * 255).round()),
+                  ),
+                  // Conteúdo rolável
+                  Flexible(
+                    child: dialogContent,
+                  ),
+                  // Botões de Ação
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 16.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          child: const Text('Cancel'),
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                          },
                         ),
-                      );
-                    }
-                  },
-                ),
-              ],
-            );
-          },
+                        TextButton(
+                          child: Text(task == null ? 'Add' : 'Save',
+                              style: const TextStyle(
+                                  color: kAccentColor, fontWeight: FontWeight.bold)),
+                          onPressed: () {
+                            final text = textController.text.trim();
+                            if (text.isNotEmpty) {
+                              final finalSubtasks = subControllersState.value
+                                  .map((c) => c.text.trim())
+                                  .where((s) => s.isNotEmpty)
+                                  .toList();
+                              final finalCompletion = completionState.value;
+                              List<bool> adjustedCompletion = [];
+                              int subtaskStateIndex = 0;
+                              for (final controller in subControllersState.value) {
+                                if (controller.text.trim().isNotEmpty) {
+                                  adjustedCompletion.add(
+                                      finalCompletion.length > subtaskStateIndex
+                                          ? finalCompletion[subtaskStateIndex]
+                                          : false);
+                                }
+                                subtaskStateIndex++;
+                              }
+
+                              if (task == null) {
+                                DataService.addTask(
+                                  text,
+                                  finalSubtasks,
+                                  repeatState.value,
+                                  reminderState.value,
+                                );
+                              } else {
+                                DataService.updateTask(
+                                  task,
+                                  text,
+                                  finalSubtasks,
+                                  adjustedCompletion,
+                                  repeatState.value,
+                                  reminderState.value,
+                                );
+                              }
+                              Navigator.of(context).pop();
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content:
+                                      const Text('Task description cannot be empty.'),
+                                  backgroundColor:
+                                      kRedColor.withAlpha((0.8 * 255).round()),
+                                ),
+                              );
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
         );
       },
     ).whenComplete(() {
@@ -404,7 +633,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 
   Future<void> _showNoteDialog({Note? note}) async {
-    // ... (O diálogo de Nota permanece o mesmo) ...
     final textController = TextEditingController(text: note?.text ?? '');
     await showDialog<void>(
       context: context,
@@ -425,7 +653,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           return AlertDialog(
             backgroundColor: Theme.of(context).dialogTheme.backgroundColor,
             title: Text(note == null ? 'New Note' : 'Edit Note',
-                style: TextStyle(color: kAccentColor.withAlpha((0.8 * 255).round()))),
+                style: TextStyle(
+                    color: kAccentColor.withAlpha((0.8 * 255).round()))),
             contentPadding: const EdgeInsets.fromLTRB(24.0, 20.0, 24.0, 0.0),
             content: SingleChildScrollView(
               child: ListBody(
@@ -479,7 +708,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: const Text('Note content cannot be empty.'),
-                        backgroundColor: kRedColor.withAlpha((0.8 * 255).round()),
+                        backgroundColor:
+                            kRedColor.withAlpha((0.8 * 255).round()),
                       ),
                     );
                   }
@@ -494,9 +724,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     });
   }
 
-  // --- Diálogo do Perfil (Modal) ---
   Future<void> _showProfileModal() async {
-    // ... (O modal de Profile permanece o mesmo) ...
     final profile = profileBox.get(profileKey,
         defaultValue:
             UserProfile(totalXP: 0.0, level: 1, playerName: "Player"))!;
@@ -549,15 +777,14 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               setState(() {});
             }
           } catch (e) {
-            if (mounted) {
-              ScaffoldMessenger.of(this.context).showSnackBar(
-                SnackBar(
-                  content: const Text(
-                      'Falha ao escolher imagem. Verifique as permissões.'),
-                  backgroundColor: kRedColor.withAlpha((0.8 * 255).round()),
-                ),
-              );
-            }
+            if (!context.mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text(
+                    'Failed to pick image. Check permissions.'),
+                backgroundColor: kRedColor.withAlpha((0.8 * 255).round()),
+              ),
+            );
           }
         }
 
@@ -587,6 +814,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               setState(() {});
             }
           }
+
           ImageProvider? backgroundImage;
           if (profile.avatarImagePath != null && !avatarFileError) {
             backgroundImage = FileImage(File(profile.avatarImagePath!));
@@ -602,8 +830,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               decoration: BoxDecoration(
                 color: kCardColor.withAlpha((0.95 * 255).round()),
                 borderRadius: BorderRadius.circular(16),
-                border:
-                    Border.all(color: kTextSecondary.withAlpha((0.2 * 255).round()), width: 1),
+                border: Border.all(
+                    color: kTextSecondary.withAlpha((0.2 * 255).round()),
+                    width: 1),
               ),
               child: SingleChildScrollView(
                 child: Column(
@@ -730,8 +959,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                         value: progresso,
                         minHeight: 8,
                         backgroundColor: Colors.black26,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                            Colors.amber[400]!),
+                        valueColor:
+                            AlwaysStoppedAnimation<Color>(Colors.amber[400]!),
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -787,7 +1016,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                         color: Colors.black26,
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                            color: kTextSecondary.withAlpha((0.2 * 255).round()),
+                            color:
+                                kTextSecondary.withAlpha((0.2 * 255).round()),
                             width: 1),
                       ),
                       child: const Center(
@@ -810,7 +1040,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 
   Widget _buildStatCounter(String label, int count, Color color) {
-    // ... (Este widget auxiliar permanece o mesmo) ...
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -835,14 +1064,11 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 
   Future<void> _showHistoryModal() async {
-    // ... (Este modal permanece o mesmo) ...
     _searchHistoryController.clear();
-    if (mounted) {
-      setState(() {
-        _historySearchTerm = '';
-        _historyType = 'Tarefas';
-      });
-    }
+    
+    String historyType = 'Tasks';
+    String historySearchTerm = '';
+
     await showModalBottomSheet(
         context: context,
         isScrollControlled: true,
@@ -852,21 +1078,21 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         ),
         builder: (context) {
           return HookBuilder(builder: (context) {
-            final historyTypeState = useState('Tarefas');
-            final searchTermState = useState('');
+            final historyTypeState = useState(historyType);
+            final searchTermState = useState(historySearchTerm);
             useEffect(() {
               listener() {
                 if (mounted) {
                   searchTermState.value =
                       _searchHistoryController.text.toLowerCase();
-                   setState(() {
-                     _historySearchTerm = searchTermState.value;
-                   });
+                  historySearchTerm = searchTermState.value;
                 }
               }
+
               _searchHistoryController.addListener(listener);
               return () => _searchHistoryController.removeListener(listener);
             }, [_searchHistoryController]);
+            
             return Container(
               height: MediaQuery.of(context).size.height * 0.8,
               padding: const EdgeInsets.all(16.0),
@@ -895,25 +1121,21 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     children: [
                       ChoiceChip(
                         label: const Text('Tasks'),
-                        selected: historyTypeState.value == 'Tarefas',
+                        selected: historyTypeState.value == 'Tasks',
                         onSelected: (_) {
-                          historyTypeState.value = 'Tarefas';
+                          historyTypeState.value = 'Tasks';
                           _searchHistoryController.clear();
-                           setState(() {
-                             _historyType = 'Tarefas';
-                           });
+                          historyType = 'Tasks';
                         },
                       ),
                       const SizedBox(width: 10),
                       ChoiceChip(
                         label: const Text('Notes'),
-                        selected: historyTypeState.value == 'Notas',
+                        selected: historyTypeState.value == 'Notes',
                         onSelected: (_) {
-                          historyTypeState.value = 'Notas';
+                          historyTypeState.value = 'Notes';
                           _searchHistoryController.clear();
-                           setState(() {
-                             _historyType = 'Notas';
-                           });
+                          historyType = 'Notes';
                         },
                       ),
                     ],
@@ -947,23 +1169,18 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     ),
                   ),
                   Expanded(
-                    child: historyTypeState.value == 'Tarefas'
-                        ? _buildTaskList(context, true, searchTermState.value)
-                        : _buildNotesList(context, true, searchTermState.value),
+                    child: historyTypeState.value == 'Tasks'
+                        ? _buildTaskList(context, true, searchTermState.value) 
+                        : _buildNotesList(context, true, searchTermState.value), 
                   ),
                 ],
               ),
             );
           });
-        }).whenComplete(() {
-      setState(() {
-        _historySearchTerm = '';
-      });
-    });
+        });
   }
 
   Future<bool> _confirmDismiss(String itemName) async {
-    // ... (Este widget auxiliar permanece o mesmo) ...
     final result = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
@@ -990,42 +1207,43 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     return result ?? false;
   }
 
-  // --- Widgets de Construção das Listas (Tarefas, Notas) ---
-  
-  // ***** CORREÇÃO DEFINITIVA DO BUG DE ATUALIZAÇÃO *****
-  Widget _buildTaskList(BuildContext context, bool showCompleted, String searchTerm) {
-    // 1. Substitui todos os hooks por ValueListenableBuilder
+  Widget _buildTaskList(
+      BuildContext context, bool showCompleted, String searchTerm) {
     return ValueListenableBuilder(
       valueListenable: tasksBox.listenable(),
       builder: (context, Box<Task> box, _) {
-        
-        // 2. A lógica de filtragem e ordenação agora roda
-        //    DENTRO do builder. Isso garante que ela RODE
-        //    toda vez que a caixa (box) for alterada.
         final keys = box.keys.where((key) {
-          final task = box.get(key); 
+          final task = box.get(key);
           if (task == null) return false;
-          
+
           bool matchesSearch = searchTerm.isEmpty ||
               (task.text.toLowerCase().contains(searchTerm));
-          
-          return task.isCompleted == showCompleted && matchesSearch;
+
+          bool isVisible;
+          if (showCompleted) {
+            isVisible = task.isCompleted;
+          } else {
+            isVisible = !task.isCompleted;
+          }
+
+          return isVisible && matchesSearch;
         }).toList();
 
         keys.sort((a, b) {
           final taskA = box.get(a);
           final taskB = box.get(b);
           if (taskA == null || taskB == null) return 0;
-          
+
           if (showCompleted) {
+            // Histórico: Mais recentes primeiro
             return (taskB.completedAt ?? DateTime(0))
                 .compareTo(taskA.completedAt ?? DateTime(0));
           } else {
+            // Pendentes: Mais novas primeiro
             return taskB.createdAt.compareTo(taskA.createdAt);
           }
         });
 
-        // 3. O resto da lógica (lista vazia, etc.) permanece
         if (keys.isEmpty) {
           return Center(
               child: Padding(
@@ -1044,14 +1262,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           ));
         }
 
-        // 4. Retorna o ListView
         return ListView.builder(
           padding:
               const EdgeInsets.only(bottom: 80, left: 8, right: 8, top: 8),
-          itemCount: keys.length, 
+          itemCount: keys.length,
           itemBuilder: (context, index) {
             final taskKey = keys[index];
-            final task = tasksBox.get(taskKey); 
+            final task = tasksBox.get(taskKey);
 
             if (task == null) return const SizedBox.shrink();
 
@@ -1069,22 +1286,18 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildNotesList(BuildContext context, bool showArchived, String searchTerm) {
-    // ***** CORREÇÃO DEFINITIVA DO BUG DE ATUALIZAÇÃO *****
-    // 1. Substitui todos os hooks por ValueListenableBuilder
+  Widget _buildNotesList(
+      BuildContext context, bool showArchived, String searchTerm) {
     return ValueListenableBuilder(
       valueListenable: notesBox.listenable(),
       builder: (context, Box<Note> box, _) {
-        
-        // 2. A lógica de filtragem e ordenação agora roda
-        //    DENTRO do builder.
         final keys = box.keys.where((key) {
           final note = box.get(key);
           if (note == null) return false;
-          
-          bool matchesSearch = searchTerm.isEmpty ||
-              note.text.toLowerCase().contains(searchTerm);
-          
+
+          bool matchesSearch =
+              searchTerm.isEmpty || note.text.toLowerCase().contains(searchTerm);
+
           return note.isArchived == showArchived && matchesSearch;
         }).toList();
 
@@ -1092,7 +1305,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           final noteA = box.get(a);
           final noteB = box.get(b);
           if (noteA == null || noteB == null) return 0;
-          
+
           if (showArchived) {
             return (noteB.archivedAt ?? DateTime(0))
                 .compareTo(noteA.archivedAt ?? DateTime(0));
@@ -1101,7 +1314,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           }
         });
 
-        // 3. O resto da lógica (lista vazia, etc.) permanece
         if (keys.isEmpty) {
           return Center(
               child: Padding(
@@ -1119,21 +1331,21 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             ),
           ));
         }
-        
-        // 4. Retorna o ListView
+
         return ListView.separated(
-          padding: const EdgeInsets.only(bottom: 80, left: 8, right: 8, top: 8),
-          itemCount: keys.length, 
+          padding:
+              const EdgeInsets.only(bottom: 80, left: 8, right: 8, top: 8),
+          itemCount: keys.length,
           separatorBuilder: (context, index) => Divider(
               height: 1,
               thickness: 0.3,
               color: kTextSecondary.withAlpha((0.2 * 255).round())),
           itemBuilder: (context, index) {
             final noteKey = keys[index];
-            final note = notesBox.get(noteKey); 
+            final note = notesBox.get(noteKey);
 
-            if (note == null) return const SizedBox.shrink(); 
-            
+            if (note == null) return const SizedBox.shrink();
+
             return ListTile(
               contentPadding: const EdgeInsets.only(left: 4.0, right: 0),
               leading: IconButton(
@@ -1180,7 +1392,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     padding: const EdgeInsets.only(
                         left: 0, right: 8, top: 8, bottom: 8),
                     constraints: const BoxConstraints(),
-                    tooltip: 'Delete Task',
+                    tooltip: 'Delete Note',
                     onPressed: () async {
                       final confirm = await _confirmDismiss(
                           note.text.length > 30
@@ -1201,9 +1413,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
 
-
   Widget _buildProfileTab() {
-    // ... (Este widget permanece o mesmo) ...
     return ValueListenableBuilder(
       valueListenable: profileBox.listenable(),
       builder: (context, Box<UserProfile> box, _) {
@@ -1220,8 +1430,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                 ? 1.0
                 : (xpProximoNivel - xpNivelAtualBase);
         final double progresso = (xpNecessarioParaNivel > 0)
-            ? (xpNoNivelAtual / xpNecessarioParaNivel).clamp(0.0, 1.0)
-            : 0.0;
+              ? (xpNoNivelAtual / xpNecessarioParaNivel).clamp(0.0, 1.0)
+              : 0.0;
         return Center(
           child: Padding(
             padding: const EdgeInsets.all(24.0),
@@ -1281,8 +1491,33 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
 
+  void _handleExport() async {
+    if (!context.mounted) return;
+    final result = await BackupService.exportData(context);
+
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(result),
+        backgroundColor: result.startsWith("Error") ? kRedColor : kAccentColor,
+      ),
+    );
+  }
+
+  void _handleImport() async {
+    if (!context.mounted) return;
+    final result = await BackupService.importData(context);
+
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(result),
+        backgroundColor: result.startsWith("Error") ? kRedColor : kAccentColor,
+      ),
+    );
+  }
+
   Widget _buildDrawer() {
-    // ... (Este widget auxiliar permanece o mesmo) ...
     return Drawer(
       child: ListView(
         padding: EdgeInsets.zero,
@@ -1311,11 +1546,30 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               _showProfileModal();
             },
           ),
+          const Divider(color: kTextSecondary),
+          ListTile(
+            leading: const Icon(Icons.download_outlined, color: kTextSecondary),
+            title: const Text('Export Data', style: TextStyle(color: kTextPrimary)),
+            onTap: () {
+              Navigator.pop(context);
+              _handleExport();
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.upload_outlined, color: kTextSecondary),
+            title: const Text('Import Data', style: TextStyle(color: kTextPrimary)),
+            onTap: () {
+              Navigator.pop(context);
+              _handleImport(); 
+            },
+          ),
+          const Divider(color: kTextSecondary),
           ListTile(
             leading: Icon(Icons.inventory_2_outlined,
                 color: kTextSecondary.withAlpha((0.4 * 255).round())),
             title: Text('Inventory (Soon)',
-                style: TextStyle(color: kTextSecondary.withAlpha((0.4 * 255).round()))),
+                style: TextStyle(
+                    color: kTextSecondary.withAlpha((0.4 * 255).round()))),
             enabled: false,
             onTap: () {},
           ),
@@ -1323,7 +1577,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             leading: Icon(Icons.people_outline,
                 color: kTextSecondary.withAlpha((0.4 * 255).round())),
             title: Text('Friends & Party (Soon)',
-                style: TextStyle(color: kTextSecondary.withAlpha((0.4 * 255).round()))),
+                style: TextStyle(
+                    color: kTextSecondary.withAlpha((0.4 * 255).round()))),
             enabled: false,
             onTap: () {},
           ),
@@ -1331,7 +1586,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             leading: Icon(Icons.gamepad_outlined,
                 color: kTextSecondary.withAlpha((0.4 * 255).round())),
             title: Text('Mini Games (Soon)',
-                style: TextStyle(color: kTextSecondary.withAlpha((0.4 * 255).round()))),
+                style: TextStyle(
+                    color: kTextSecondary.withAlpha((0.4 * 255).round()))),
             enabled: false,
             onTap: () {},
           ),
@@ -1339,7 +1595,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             leading: Icon(Icons.emoji_events_outlined,
                 color: kTextSecondary.withAlpha((0.4 * 255).round())),
             title: Text('Achievements (Soon)',
-                style: TextStyle(color: kTextSecondary.withAlpha((0.4 * 255).round()))),
+                style: TextStyle(
+                    color: kTextSecondary.withAlpha((0.4 * 255).round()))),
             enabled: false,
             onTap: () {},
           ),
@@ -1347,15 +1604,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             leading: Icon(Icons.settings_outlined,
                 color: kTextSecondary.withAlpha((0.4 * 255).round())),
             title: Text('Settings (Soon)',
-                style: TextStyle(color: kTextSecondary.withAlpha((0.4 * 255).round()))),
-            enabled: false,
-            onTap: () {},
-          ),
-          const Divider(color: kTextSecondary),
-          ListTile(
-            leading: const Icon(Icons.logout, color: kRedColor),
-            title:
-                const Text('Logout (Soon)', style: TextStyle(color: kRedColor)),
+                style: TextStyle(
+                    color: kTextSecondary.withAlpha((0.4 * 255).round()))),
             enabled: false,
             onTap: () {},
           ),
@@ -1365,7 +1615,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 
   Widget _buildProfileCard() {
-    // ... (Este widget auxiliar permanece o mesmo) ...
     return HookBuilder(builder: (context) {
       final imageError = useState(false);
       final avatarFileError = useState(false);
@@ -1407,7 +1656,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                 children: [
                   CircleAvatar(
                       radius: 22,
-                      backgroundColor: kTextSecondary.withAlpha((0.4 * 255).round()),
+                      backgroundColor:
+                          kTextSecondary.withAlpha((0.4 * 255).round()),
                       backgroundImage: backgroundImage,
                       onBackgroundImageError: (e, s) {
                         if (profile.avatarImagePath != null &&
@@ -1440,7 +1690,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                           decoration: BoxDecoration(
                             color: kAccentColor.withAlpha((0.2 * 255).round()),
                             border: Border.all(
-                                color: kAccentColor.withAlpha((0.5 * 255).round()),
+                                color:
+                                    kAccentColor.withAlpha((0.5 * 255).round()),
                                 width: 0.5),
                             borderRadius: BorderRadius.circular(12),
                           ),
@@ -1500,7 +1751,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 
   Widget _buildSpeedDial() {
-    // ... (Este widget auxiliar permanece o mesmo) ...
     return SpeedDial(
       icon: Icons.add,
       activeIcon: Icons.close,
@@ -1537,13 +1787,11 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 
   Widget _buildActionButtons(BuildContext context, double bottomPadding) {
-    // ... (Este widget auxiliar permanece o mesmo) ...
     final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom != 0;
     if (isKeyboardOpen) return const SizedBox.shrink();
     final fabBottomMargin = 16.0 + bottomPadding;
     const fabSize = 56.0;
-    final bottomPosition =
-        fabBottomMargin + fabSize + 16.0;
+    final bottomPosition = fabBottomMargin + fabSize + 16.0;
     return Positioned(
       bottom: bottomPosition,
       right: 16 + 4.0,
@@ -1587,7 +1835,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   Widget _buildSearchField(
       TextEditingController controller, String hintText) {
-    // ... (Este widget auxiliar permanece o mesmo) ...
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: TextField(
@@ -1613,6 +1860,43 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
         ),
       ),
+    );
+  }
+
+  // --- Widget de Loading Overlay ---
+  Widget _buildLoadingOverlay() {
+    return Stack(
+      children: [
+        // Fundo com blur
+        Positioned.fill(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
+            child: Container(
+              color: Colors.black.withOpacity(0.5),
+            ),
+          ),
+        ),
+        // Indicador de loading
+        Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(kAccentColor),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Performing daily check-in...',
+                style: TextStyle(
+                  color: kTextPrimary.withOpacity(0.8),
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -1697,26 +1981,20 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   child: TabBarView(
                     controller: _tabController,
                     children: [
-                      // ***** CORREÇÃO: REMOVIDA A BARRA DE PESQUISA DE TAREFAS *****
                       Column(
                         children: [
-                          // A barra de pesquisa foi removida daqui
                           Expanded(
-                            // ***** CORREÇÃO: Removido o HookBuilder *****
-                            child: _buildTaskList(
-                                  context, false, ""), 
+                            child: _buildTaskList(context, false, ""),
                           ),
                         ],
                       ),
-                      // ***** FIM DA CORREÇÃO *****
                       Column(
                         children: [
-                           _buildSearchField(
+                          _buildSearchField(
                               _searchNotesController, 'Search in notes...'),
                           Expanded(
-                            // ***** CORREÇÃO: Removido o HookBuilder *****
                             child: _buildNotesList(
-                                  context, false, _notesSearchTerm),
+                                context, false, _notesSearchTerm),
                           ),
                         ],
                       ),
@@ -1727,11 +2005,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               ],
             ),
             _buildActionButtons(context, bottomPadding),
+            if (_isLoadingDailyCheck) _buildLoadingOverlay(),
           ],
         ),
-        floatingActionButton: isKeyboardOpen ? null : _buildSpeedDial(),
+        floatingActionButton: (isKeyboardOpen || _isLoadingDailyCheck)
+            ? null
+            : _buildSpeedDial(),
       ),
     );
   }
 }
-

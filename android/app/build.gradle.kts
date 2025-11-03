@@ -13,6 +13,9 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+        
+        // 1. A CORREÇÃO É ESTA LINHA AQUI
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -20,20 +23,19 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        // ... (seu defaultConfig)
         applicationId = "com.example.mylitapp"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        
+        // 2. A LINHA ERRADA FOI REMOVIDA DAQUI
     }
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
+            // ... (seu signingConfig)
             signingConfig = signingConfigs.getByName("debug")
         }
     }
@@ -42,3 +44,9 @@ android {
 flutter {
     source = "../.."
 }
+
+// 3. A SEGUNDA PARTE DA CORREÇÃO É ESTA
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+}
+

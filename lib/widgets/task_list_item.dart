@@ -1,12 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:lit/models.dart';
 import 'package:lit/main.dart'; // Para constantes de cores
+import 'package:intl/intl.dart'; // Para formatar datas
 
 /// Um widget que representa um único item da lista de tarefas.
-///
-/// ***** CORREÇÃO DO BUG 2 *****
-/// Removemos o ExpansionTile. Agora ele usa um Column para
-/// *sempre* mostrar as subtasks se elas existirem.
 class TaskListItem extends StatelessWidget {
   final Task task;
   final Function(Task) onToggleComplete;
@@ -28,6 +25,53 @@ class TaskListItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // --- Define os componentes reutilizáveis ---
+    
+    // Formata a data de conclusão (para o histórico)
+    String? completedTimestamp;
+    if (task.isCompleted && task.completedAt != null) {
+      completedTimestamp = DateFormat('MMM d, yyyy  h:mm a').format(task.completedAt!);
+    }
+    
+    // --- CORREÇÃO: Lógica dos Ícones e Texto do Lembrete ---
+    
+    // 1. Widget do Ícone de Repetição
+    Widget? repeatIconWidget;
+    if (!task.isCompleted && task.repeatFrequency != RepeatFrequency.none) {
+      repeatIconWidget = Padding(
+        padding: const EdgeInsets.only(right: 6.0, top: 4.0), // Espaçamento
+        child: const Icon(Icons.repeat, size: 14, color: kTextSecondary),
+      );
+    }
+    
+    // 2. Widget do Lembrete (Texto)
+    Widget? reminderTextWidget;
+    if (!task.isCompleted && task.reminderDateTime != null) {
+      final bool isOverdue = task.reminderDateTime!.isBefore(DateTime.now());
+      // Amarelo suave se não estiver atrasado, vermelho se estiver
+      final Color reminderColor = isOverdue ? kRedColor : kYellowColor.withAlpha(200); 
+      final String reminderText = DateFormat('MMM d, h:mm a').format(task.reminderDateTime!);
+      
+      reminderTextWidget = Padding(
+        padding: const EdgeInsets.only(top: 4.0),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.alarm, size: 14, color: reminderColor),
+            const SizedBox(width: 4),
+            Text(
+              reminderText,
+              style: TextStyle(
+                fontSize: 12,
+                color: reminderColor,
+                fontWeight: isOverdue ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    // --- FIM DA CORREÇÃO ---
+
 
     // Botões de Ação (Editar, Deletar)
     Widget trailingButtons = Row(
@@ -64,26 +108,48 @@ class TaskListItem extends StatelessWidget {
     );
 
     // Título
-    Widget title = Text(
-      task.text,
-      style: TextStyle(
-        fontSize: 15,
-        color: task.isCompleted ? kTextSecondary : kTextPrimary,
-        decoration: task.isCompleted ? TextDecoration.lineThrough : null,
-        decorationColor: kTextSecondary,
-        decorationThickness: 1.5,
-      ),
+    Widget title = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+         Text(
+          task.text,
+          style: TextStyle(
+            fontSize: 15,
+            color: task.isCompleted ? kTextSecondary : kTextPrimary,
+            decoration: task.isCompleted ? TextDecoration.lineThrough : null,
+            decorationColor: kTextSecondary,
+            decorationThickness: 1.5,
+          ),
+        ),
+        // Mostra a data de conclusão no histórico
+        if (completedTimestamp != null)
+           Padding(
+             padding: const EdgeInsets.only(top: 2.0),
+             child: Text(
+               completedTimestamp,
+               style: const TextStyle(fontSize: 12, color: kTextSecondary),
+             ),
+           ),
+        
+        // --- CORREÇÃO: Mostra os ícones juntos ---
+        if (repeatIconWidget != null || reminderTextWidget != null)
+          Wrap( // Wrap cuida do alinhamento
+            children: [
+              if (repeatIconWidget != null) repeatIconWidget,
+              if (reminderTextWidget != null) reminderTextWidget,
+            ],
+          ),
+        // --- FIM DA CORREÇÃO ---
+      ],
     );
 
     // --- Lógica de Build ---
-
-    // ***** CORREÇÃO DO BUG 2: REMOVIDO EXPANSIONTILE *****
     return Card(
-      // O CardTheme do ThemeData será aplicado
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // 1. A TAREFA PRINCIPAL (Sempre visível)
+          // 1. A TAREFA PRINCIPAL
           ListTile(
             contentPadding:
                 const EdgeInsets.only(left: 4.0, right: 0, top: 4, bottom: 4),
@@ -97,8 +163,6 @@ class TaskListItem extends StatelessWidget {
           if (task.hasSubtasksFast)
             Padding(
               padding: const EdgeInsets.only(left: 56.0, right: 16.0, bottom: 12.0, top: 0.0),
-              // Usa os getters lentos aqui. Como a lista principal
-              // é async (useFuture), isso não deve travar a UI inicial.
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: task.subtasks.asMap().entries.map((entry) {
@@ -154,7 +218,5 @@ class TaskListItem extends StatelessWidget {
         ],
       ),
     );
-    // ***** FIM DA CORREÇÃO DO BUG 2 *****
   }
 }
-
