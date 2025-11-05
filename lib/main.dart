@@ -86,19 +86,19 @@ Future<void> main() async {
 
   if (oldTasksExist && !newTasksExist) {
     // ... (todo o seu código de migração que funcionou)
-    print("--- INICIANDO MIGRAÇÃO DE DADOS v4 -> v5 ---");
+    // print("--- INICIANDO MIGRAÇÃO DE DADOS v4 -> v5 ---"); // Lint: avoid_print
 
     Hive.registerAdapter(LegacyMapAdapter(0)); 
     Hive.registerAdapter(LegacyMapAdapter(32)); 
     Hive.registerAdapter(NoteAdapter());
     Hive.registerAdapter(UserProfileAdapter());
 
-    print("Lendo dados antigos...");
+    // print("Lendo dados antigos..."); // Lint: avoid_print
     final oldTasks = await Hive.openBox<dynamic>(oldTasksBoxName); 
     final oldNotes = await Hive.openBox<Note>(oldNotesBoxName); 
     final oldProfile = await Hive.openBox<UserProfile>(oldProfileBoxName); 
 
-    print("Registrando adapters novos para escrever dados...");
+    // print("Registrando adapters novos para escrever dados..."); // Lint: avoid_print
     Hive.registerAdapter(TaskAdapter()); // typeId: 10 (Novo)
     Hive.registerAdapter(RepeatFrequencyAdapter()); // typeId: 3 (Novo)
 
@@ -106,7 +106,7 @@ Future<void> main() async {
     final newNotes = await Hive.openBox<Note>(notesBoxName); // v5
     final newProfile = await Hive.openBox<UserProfile>(profileBoxName); // v5
 
-    print("Migrando Tarefas...");
+    // print("Migrando Tarefas..."); // Lint: avoid_print
     for (var oldData in oldTasks.values) {
       if (oldData is Map) {
         // ... (lógica de conversão do Map)
@@ -133,9 +133,9 @@ Future<void> main() async {
         await newTasks.put(newTask.id, newTask);
       }
     }
-    print("Tarefas migradas: ${newTasks.length}");
+    // print("Tarefas migradas: ${newTasks.length}"); // Lint: avoid_print
 
-    print("Migrando Notas...");
+    // print("Migrando Notas..."); // Lint: avoid_print
     for (var note in oldNotes.values) {
         final newNote = Note(
           id: note.id,
@@ -146,9 +146,9 @@ Future<void> main() async {
         );
         await newNotes.put(newNote.id, newNote); 
     }
-    print("Notas migradas: ${newNotes.length}");
+    // print("Notas migradas: ${newNotes.length}"); // Lint: avoid_print
 
-    print("Migrando Perfil...");
+    // print("Migrando Perfil..."); // Lint: avoid_print
     final profile = oldProfile.get(oldProfileKey);
     if (profile != null) {
         final newProf = UserProfile(
@@ -158,17 +158,17 @@ Future<void> main() async {
           avatarImagePath: profile.avatarImagePath,
         );
         await newProfile.put(profileKey, newProf); 
-        print("Perfil migrado.");
+        // print("Perfil migrado."); // Lint: avoid_print
     }
     
-    print("Limpando caixas antigas...");
+    // print("Limpando caixas antigas..."); // Lint: avoid_print
     await oldTasks.close();
     await oldNotes.close();
     await oldProfile.close();
     await Hive.deleteBoxFromDisk(oldTasksBoxName);
     await Hive.deleteBoxFromDisk(oldNotesBoxName);
     await Hive.deleteBoxFromDisk(oldProfileBoxName);
-    print("--- MIGRAÇÃO CONCLUÍDA ---");
+    // print("--- MIGRAÇÃO CONCLUÍDA ---"); // Lint: avoid_print
 
     await newTasks.close();
     await newNotes.close();
@@ -225,7 +225,7 @@ class MyApp extends StatelessWidget {
         ),
         cardTheme: CardThemeData(
           color:
-              kCardColor.withAlpha((0.65 * 255).round()), 
+              kCardColor.withOpacity(0.65), // Lint: deprecated_member_use
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16), 
@@ -237,7 +237,7 @@ class MyApp extends StatelessWidget {
           margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         ),
         dialogTheme: DialogThemeData(
-          backgroundColor: kCardColor.withAlpha((0.75 * 255).round()),
+          backgroundColor: kCardColor.withOpacity(0.75), // Lint: deprecated_member_use
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24),
@@ -245,14 +245,14 @@ class MyApp extends StatelessWidget {
           ),
         ),
         bottomSheetTheme: BottomSheetThemeData(
-          backgroundColor: kCardColor.withAlpha((0.75 * 255).round()),
-          modalBackgroundColor: kCardColor.withAlpha((0.85 * 255).round()),
+          backgroundColor: kCardColor.withOpacity(0.75), // Lint: deprecated_member_use
+          modalBackgroundColor: kCardColor.withOpacity(0.85), // Lint: deprecated_member_use
           shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
           ),
         ),
         floatingActionButtonTheme: FloatingActionButtonThemeData(
-          backgroundColor: kAccentColor.withAlpha((0.9 * 255).round()),
+          backgroundColor: kAccentColor.withOpacity(0.9), // Lint: deprecated_member_use
           foregroundColor: kTextPrimary,
           elevation: 0,
           shape: RoundedRectangleBorder(
@@ -286,7 +286,7 @@ class MyApp extends StatelessWidget {
                 BorderSide(color: kTextPrimary.withAlpha(15), width: 0.5),
           ),
           filled: true,
-          fillColor: kCardColor.withAlpha((0.3 * 255).round()),
+          fillColor: kCardColor.withOpacity(0.3), // Lint: deprecated_member_use
           hintStyle: TextStyle(color: kTextSecondary.withAlpha(150)),
           labelStyle: const TextStyle(color: kTextPrimary),
           contentPadding:
@@ -295,9 +295,9 @@ class MyApp extends StatelessWidget {
         checkboxTheme: CheckboxThemeData(
           fillColor: WidgetStateProperty.resolveWith((states) {
             if (states.contains(WidgetState.selected)) {
-              return kAccentColor.withAlpha((0.9 * 255).round());
+              return kAccentColor.withOpacity(0.9); // Lint: deprecated_member_use
             }
-            return kCardColor.withAlpha((0.5 * 255).round());
+            return kCardColor.withOpacity(0.5); // Lint: deprecated_member_use
           }),
           checkColor: WidgetStateProperty.all(kTextPrimary),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),

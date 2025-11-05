@@ -111,6 +111,7 @@ class BackupService {
       if (!context.mounted) return "Error: Context lost.";
       final bool? confirm = await showDialog<bool>(
         context: context,
+        useRootNavigator: true, // SOLUÇÃO PARA O PROBLEMA DA TELA PRETA
         builder: (ctx) => AlertDialog(
           title: const Text('Confirm Import', style: TextStyle(color: kRedColor)),
           content: const Text(

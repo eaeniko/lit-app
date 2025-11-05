@@ -114,6 +114,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
             showDialog<void>(
               context: context,
+              useRootNavigator: true, // ADICIONADO
               barrierDismissible: false, 
               builder: (BuildContext context) => AlertDialog(
                 title: const Text('Permissions for Reminders'),
@@ -195,6 +196,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     await showDialog<void>(
       context: context,
       barrierDismissible: true,
+      useRootNavigator: true, // SOLUÇÃO PARA O PROBLEMA DA TELA PRETA
       builder: (BuildContext context) {
         return Dialog(
           insetPadding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 48.0),
@@ -648,6 +650,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     await showDialog<void>(
       context: context,
       barrierDismissible: true,
+      useRootNavigator: true, // SOLUÇÃO PARA O PROBLEMA DA TELA PRETA
       builder: (BuildContext context) {
         return HookBuilder(builder: (context) {
           final textState = useState(textController.text);
@@ -742,6 +745,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     final nameController = TextEditingController(text: profile.playerName);
     return showDialog<void>(
       context: context,
+      useRootNavigator: true, // SOLUÇÃO PARA O PROBLEMA DA TELA PRETA
       builder: (BuildContext context) {
         bool isEditingName = false;
         bool imageError = false;
@@ -1083,6 +1087,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     await showModalBottomSheet(
         context: context,
         isScrollControlled: true,
+        useRootNavigator: true, // SOLUÇÃO PARA O PROBLEMA DA TELA PRETA
         backgroundColor: kCardColor,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -1194,6 +1199,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   Future<bool> _confirmDismiss(String itemName) async {
     final result = await showDialog<bool>(
       context: context,
+      useRootNavigator: true, // SOLUÇÃO PARA O PROBLEMA DA TELA PRETA
       builder: (BuildContext context) {
         return AlertDialog(
           backgroundColor: Theme.of(context).dialogTheme.backgroundColor,
